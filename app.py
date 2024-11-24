@@ -197,7 +197,7 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
     """Generate a preview of the API call that would be sent"""
     message_content = []
     
-    # Add each PDF document placeholder
+    # Add each PDF document placeholder (showing exact structure)
     for pdf in uploaded_files:
         message_content.append({
             "type": "document",
@@ -208,7 +208,7 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
             }
         })
 
-    # Add the examples and prompt
+    # Add the examples and prompt - exactly as in the real call
     message_content.extend([
         {
             "type": "text",
@@ -220,18 +220,21 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
         }
     ])
 
-    # Construct the full API call preview
+    # Construct the full API call preview - matching exactly the real call
     api_call_preview = {
         "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": 8192,
+        "max_tokens": 8192,  # Fixed token limit
         "temperature": 0,
-        "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization...",
+        "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Processing multiple utility bills simultaneously while keeping each bill's data separate and organized.\n2. Accurately extracting specific fields from each bill.\n3. Handling complex cases such as tiered charges.\n4. Maintaining consistent formatting across all extracted data.\n5. Returning data as a JSON array where each bill is represented as a separate object.\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data across various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
         "messages": [
             {
                 "role": "user",
                 "content": message_content
             }
-        ]
+        ],
+        "default_headers": {  # Include the custom headers
+            "anthropic-beta": "pdfs-2024-09-25"
+        }
     }
     
     return api_call_preview
@@ -415,7 +418,7 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                     # Send to Claude API
                     message = pdf_client.messages.create(
                         model="claude-3-5-sonnet-20241022",
-                        max_tokens=8192,
+                        max_tokens=8192,  # Fixed token limit
                         temperature=0,
                         system="You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Processing multiple utility bills simultaneously while keeping each bill's data separate and organized.\n2. Accurately extracting specific fields from each bill.\n3. Handling complex cases such as tiered charges.\n4. Maintaining consistent formatting across all extracted data.\n5. Returning data as a JSON array where each bill is represented as a separate object.\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data across various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
                         messages=[
