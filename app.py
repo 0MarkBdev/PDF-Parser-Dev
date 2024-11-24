@@ -360,16 +360,16 @@ Special Instructions:
 Before providing the final JSON output double-check that all extracted values are correctly formatted.
 
 Return the data in this structure:
-{
-    "fields": ["field1", "field2", ...],
+{{
+    "fields": {list(field_dict.keys())},
     "bills": [
-        [value1, value2, ...],  // Bill 1 values in same order as fields
-        [value1, value2, ...],  // Bill 2 values
+        [null, null, ...],  // Bill 1 values in same order as fields
+        [null, null, ...],  // Bill 2 values
         // ... one array per bill ...
     ]
-}
+}}
 
-Remember to replace the values with the actual extracted data or null if the information is not found in the bill.
+Remember to replace the null values with the actual extracted data or keep as null if the information is not found in the bill.
 
 Provide ONLY the JSON object as your final output, with no additional text."""
 
