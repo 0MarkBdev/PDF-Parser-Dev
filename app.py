@@ -42,6 +42,102 @@ TEMPLATES = {
     ]
 }
 
+calculations_examples = """<examples>
+    <example>
+        <utility_bill_content>
+            CLEARWATER UTILITIES
+            789 River Road, Springville, USA 67890
+
+            Customer: Sarah Johnson
+            Account Number: 9876543210
+            Service Address: 321 Pine Street, Springville, USA 67890
+
+            Bill Date: 08/20/2023
+            Due Date: 09/10/2023
+
+            Billing Period: 07/20/2023 to 08/19/2023
+
+            Meter Readings:
+            Current Read (08/19/2023): 73,450
+            Previous Read (07/20/2023): 67,800
+            Total Usage: 5,650 gallons
+
+            Charges:
+            Water Service Charge:
+              0-2,000 gallons @ $3.00 per 1,000 gallons: $6.00
+              2,001-5,000 gallons @ $3.50 per 1,000 gallons: $10.50
+              5,001-5,650 gallons @ $4.00 per 1,000 gallons: $2.60
+              Total Water Service Charge: $19.10
+
+            Water Infrastructure Surcharge: $7.50
+            Wastewater Treatment Charge: $22.00
+            Storm Water Management Fee: $5.00
+            Environmental Compliance Fee: $1.75
+
+            Total Current Charges: $55.35
+        </utility_bill_content>
+        <ideal_output>
+            {
+              "Start Date": "07/20/2023",
+              "End Date": "08/19/2023",
+              "Account Number": "9876543210",
+              "Current Meter Read": 73450,
+              "Previous Meter Read": 67800,
+              "Total Water Usage": 5650,
+              "Water Service Charge": 6.00,
+              "Water Service Charge_2": 10.50,
+              "Water Service Charge_3": 2.60,
+              "Water Service Charge_Total": 19.10,
+              "Total Current Charges": 55.35
+            }
+        </ideal_output>
+    </example>
+</examples>"""
+
+simple_examples = """<examples>
+    <example>
+        <utility_bill_content>
+            CLEARWATER UTILITIES
+            789 River Road, Springville, USA 67890
+
+            Customer: Sarah Johnson
+            Account Number: 9876543210
+            Service Address: 321 Pine Street, Springville, USA 67890
+
+            Bill Date: 08/20/2023
+            Due Date: 09/10/2023
+
+            Billing Period: 07/20/2023 to 08/19/2023
+
+            Meter Readings:
+            Current Read (08/19/2023): 73,450
+            Previous Read (07/20/2023): 67,800
+            Total Usage: 5,650 gallons
+
+            Charges:
+            Water Service Charge: $19.10
+            Water Infrastructure Surcharge: $7.50
+            Wastewater Treatment Charge: $22.00
+            Storm Water Management Fee: $5.00
+            Environmental Compliance Fee: $1.75
+
+            Total Current Charges: $55.35
+        </utility_bill_content>
+        <ideal_output>
+            {
+              "Start Date": "07/20/2023",
+              "End Date": "08/19/2023",
+              "Account Number": "9876543210",
+              "Current Meter Read": 73450,
+              "Previous Meter Read": 67800,
+              "Total Water Usage": 5650,
+              "Water Service Charge": 19.10,
+              "Total Current Charges": 55.35
+            }
+        </ideal_output>
+    </example>
+</examples>"""
+
 
 # Add password protection
 def check_password():
@@ -754,6 +850,52 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                 
                 if st.button("Measure Call", key="measure_call_button"):
                     with st.spinner("Measuring API call..."):
+                        # Create the prompt string based on fields
+                        field_dict = {field: "" for field, _ in st.session_state.fields if field}
+
+                        tiered_calculation_instructions = """
+                       a. Use the plain field name for the first charge (e.g., "FIELD")
+                       b. Add a suffix for each additional charge (e.g., "FIELD_2", "FIELD_3")
+                       c. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
+                       d. If there isn't a clearly stated total, calculate and create one with the sum of the tiers. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal").""" if include_calculations else """
+                       a. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
+                       b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
+
+                        prompt = f"""Your objective is to extract key information from utility bills separately and present it in a standardized JSON format. Follow these steps:
+
+1. Carefully analyze each utility bill content separately.
+2. Identify and extract the required fields for each bill.
+3. Format the extracted information according to the specifications.
+4. Handle any tiered charges appropriately.
+5. Compile the final JSON output as an array of objects, one for each bill.
+
+Required Fields for each bill:
+{json.dumps(field_dict, indent=2)}
+
+Special Instructions:
+1. For charges that show a tiered calculation breakdown (like water service charges):{tiered_calculation_instructions}
+
+2. Formatting Rules:
+   - Each bill should be a separate object in the array
+   - Within each object, each field should be a separate key at the root level
+   - Do not nest the values in sub-objects
+   - Return each amount as a plain number
+   - Do not include gallons, rates, or date ranges
+
+3. If a field is not found in the bill, use null as the value.
+
+Before providing the final JSON output double-check that all extracted values are correctly formatted.
+
+After your extraction process, provide the final JSON output as an array. Each bill should follow this structure:
+[
+  {json.dumps(field_dict, indent=2)},
+  // ... one object per bill ...
+]
+
+Remember to replace the empty strings and null values with the actual extracted data or leave as null if the information is not found in the bill.
+
+Provide ONLY the JSON array as your final output, with no additional text."""
+
                         # Construct message content
                         message_content = construct_message_content(
                             uploaded_files,
