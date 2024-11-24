@@ -98,51 +98,6 @@ def render_field_controls(i: int):
             st.rerun()
 
 
-def preview_api_call(uploaded_files, prompt, include_calculations):
-    """Generate a preview of the API call that would be sent"""
-    # Create message content preview
-    message_content = []
-    
-    # Add each PDF document placeholder (we don't actually encode the PDFs here)
-    for pdf in uploaded_files:
-        message_content.append({
-            "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": "application/pdf",
-                "data": f"[Base64 encoded content of {pdf.name}]"  # Placeholder
-            }
-        })
-
-    # Add examples and prompt
-    message_content.extend([
-        {
-            "type": "text",
-            "text": calculations_examples if include_calculations else simple_examples
-        },
-        {
-            "type": "text",
-            "text": prompt
-        }
-    ])
-
-    # Create full API call preview
-    api_call_preview = {
-        "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": min(1024 * len(uploaded_files), 8192),
-        "temperature": 0,
-        "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization...",
-        "messages": [
-            {
-                "role": "user",
-                "content": message_content
-            }
-        ]
-    }
-    
-    return api_call_preview
-
-
 # Main app
 def main():
     # Get API key from secrets
@@ -736,7 +691,18 @@ Provide ONLY the JSON array as your final output, with no additional text."""
         # Debug tab content
         with debug_tab:
             # Create sections using expanders
-            with st.expander("📊 API Usage Statistics", expanded=True):
+            with st.expander("📤 API Call Preview", expanded=True):
+                st.write("Preview the API call that will be sent when processing files")
+                
+                if uploaded_files:
+                    if st.button("Generate API Call Preview"):
+                        preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                        st.session_state.api_preview = preview
+                        st.json(preview)
+                else:
+                    st.info("Upload files in the main tab to preview the API call")
+            
+            with st.expander("📊 Last API Call Statistics", expanded=False):
                 if hasattr(st.session_state, 'last_usage'):
                     st.write("Last API Call Statistics:")
                     col1, col2 = st.columns(2)
@@ -745,6 +711,7 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                     with col2:
                         st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
                     
+                    # Add stop reason explanation
                     stop_reason = st.session_state.last_usage['stop_reason']
                     explanation = {
                         "end_turn": "The model completed its response naturally.",
@@ -753,43 +720,17 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                         "error": "The response was terminated due to an error."
                     }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
                     
-                    st.info(f"**Stop Reason:** {explanation}")
+                    st.write("**Stop Reason:**")
+                    st.info(explanation)
                 else:
                     st.write("No API calls made yet.")
-
-            with st.expander("🔍 API Call Preview", expanded=True):
-                if uploaded_files:
-                    if st.button("Generate API Call Preview"):
-                        # Generate preview
-                        api_preview = preview_api_call(
-                            uploaded_files, 
-                            prompt,
-                            st.session_state.get('include_calculations', False)
-                        )
-                        
-                        # Store in session state
-                        st.session_state.api_preview = api_preview
-                        
-                        # Display preview
-                        st.write("### API Call Structure")
-                        st.json(api_preview)
-                        
-                        # Add some helpful notes
-                        st.info("""
-                        **Notes:**
-                        - PDF content is shown as placeholders to avoid memory issues
-                        - Actual API call will include base64 encoded PDF content
-                        - System prompt is truncated for readability
-                        """)
-                else:
-                    st.warning("Upload files in the main tab to preview the API call")
-
-            with st.expander("📝 Raw Response", expanded=False):
+            
+            with st.expander("📝 Raw JSON Response", expanded=False):
                 if hasattr(st.session_state, 'raw_json_response'):
                     st.write("Raw JSON Response from last API call:")
                     st.code(st.session_state.raw_json_response, language='json')
                 else:
-                    st.write("No API responses yet.")
+                    st.write("No API response data available yet.")
 
     # Display processing status if it exists
     if st.session_state.get('processing_status'):
