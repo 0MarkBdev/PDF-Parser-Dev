@@ -334,13 +334,13 @@ def main():
        a. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
        b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
 
-        prompt = f"""Your objective is to extract key information from utility bills separately and present it in a standardized JSON format. Follow these steps:
+        prompt = f"""Your objective is to extract key information from utility bills and present it in a standardized nested JSON format. Follow these steps:
 
 1. Carefully analyze each utility bill content separately.
 2. Identify and extract the required fields for each bill.
 3. Format the extracted information according to the specifications.
 4. Handle any tiered charges appropriately.
-5. Compile the final JSON output as an array of objects, one for each bill.
+5. Compile the final JSON output in a nested format.
 
 Required Fields for each bill:
 {json.dumps(field_dict, indent=2)}
@@ -349,9 +349,9 @@ Special Instructions:
 1. For charges that show a tiered calculation breakdown (like water service charges):{tiered_calculation_instructions}
 
 2. Formatting Rules:
-   - Each bill should be a separate object in the array
-   - Within each object, each field should be a separate key at the root level
-   - Do not nest the values in sub-objects
+   - Use a nested format with "fields" and "bills" as main keys
+   - Place field definitions once in the "fields" array
+   - Place each bill's data in the "bills" array
    - Return each amount as a plain number
    - Do not include gallons, rates, or date ranges
 
@@ -359,15 +359,19 @@ Special Instructions:
 
 Before providing the final JSON output double-check that all extracted values are correctly formatted.
 
-After your extraction process, provide the final JSON output as an array. Each bill should follow this structure:
-[
-  {json.dumps(field_dict, indent=2)},
-  // ... one object per bill ...
-]
+Return the data in this structure:
+{
+    "fields": ["field1", "field2", ...],
+    "bills": [
+        [value1, value2, ...],  // Bill 1 values in same order as fields
+        [value1, value2, ...],  // Bill 2 values
+        // ... one array per bill ...
+    ]
+}
 
-Remember to replace the empty strings and null values with the actual extracted data or leave as null if the information is not found in the bill.
+Remember to replace the values with the actual extracted data or null if the information is not found in the bill.
 
-Provide ONLY the JSON array as your final output, with no additional text."""
+Provide ONLY the JSON object as your final output, with no additional text."""
 
         # Add file uploader
         uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
@@ -438,9 +442,15 @@ Provide ONLY the JSON array as your final output, with no additional text."""
 
                     # Parse the JSON response
                     try:
-                        all_results = json.loads(message.content[0].text)
+                        response_data = json.loads(message.content[0].text)
                         # Store raw JSON for debug tab
                         st.session_state.raw_json_response = message.content[0].text
+                        
+                        # Convert the nested format back to flat format for DataFrame
+                        all_results = []
+                        for bill_values in response_data['bills']:
+                            bill_dict = dict(zip(response_data['fields'], bill_values))
+                            all_results.append(bill_dict)
                         
                         # Add filenames to the extracted data
                         for result, pdf in zip(all_results, uploaded_files):
