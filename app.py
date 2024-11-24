@@ -223,7 +223,7 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
     # Construct the full API call preview
     api_call_preview = {
         "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": min(1024 * len(uploaded_files), 8192),
+        "max_tokens": 8192,
         "temperature": 0,
         "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization...",
         "messages": [
@@ -415,7 +415,7 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                     # Send to Claude API
                     message = pdf_client.messages.create(
                         model="claude-3-5-sonnet-20241022",
-                        max_tokens=min(8192),
+                        max_tokens=8192,
                         temperature=0,
                         system="You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Processing multiple utility bills simultaneously while keeping each bill's data separate and organized.\n2. Accurately extracting specific fields from each bill.\n3. Handling complex cases such as tiered charges.\n4. Maintaining consistent formatting across all extracted data.\n5. Returning data as a JSON array where each bill is represented as a separate object.\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data across various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
                         messages=[
