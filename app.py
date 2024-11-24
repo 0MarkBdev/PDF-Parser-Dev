@@ -232,16 +232,38 @@ def construct_message_content(uploaded_files: List[Any], include_calculations: b
 def measure_api_call(message_content: List[Dict]) -> Dict:
     """Measures the token count for a potential API call"""
     try:
+        # Create a modified version of message_content for token counting
+        # Replace document content with placeholder text
+        counting_content = []
+        pdf_sizes = []
+        
+        for content in message_content:
+            if content["type"] == "document":
+                # Store the original PDF size for estimation
+                pdf_sizes.append(len(content["source"]["data"]))
+                # Skip documents for token counting
+                continue
+            counting_content.append(content)
+        
+        # Get token count for non-document content
         token_count = Anthropic().beta.messages.count_tokens(
             model="claude-3-5-sonnet-20241022",
             messages=[{
                 "role": "user",
-                "content": message_content
+                "content": counting_content
             }]
         )
+        
+        # Estimate PDF tokens (very rough estimation)
+        estimated_pdf_tokens = sum(size // 4 for size in pdf_sizes)
+        
+        total_estimated_tokens = token_count.input_tokens + estimated_pdf_tokens
+        
         return {
             "success": True,
-            "total_tokens": token_count.input_tokens,
+            "total_tokens": total_estimated_tokens,
+            "base_tokens": token_count.input_tokens,
+            "estimated_pdf_tokens": estimated_pdf_tokens,
             "message_content": message_content
         }
     except Exception as e:
@@ -907,31 +929,23 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                         measurement = measure_api_call(message_content)
                         
                         if measurement["success"]:
-                            st.success(f"Total tokens: {measurement['total_tokens']}")
+                            st.success(f"Total estimated tokens: {measurement['total_tokens']}")
                             
                             # Display token breakdown
                             st.subheader("Token Breakdown")
                             col1, col2 = st.columns(2)
                             
-                            # Calculate approximate token counts for each component
-                            pdf_tokens = sum(len(content["source"]["data"]) // 4 
-                                           for content in message_content 
-                                           if content["type"] == "document")
-                            
-                            examples_tokens = len(calculations_examples if include_calculations 
-                                                else simple_examples) // 4
-                            prompt_tokens = len(prompt) // 4
-                            
                             with col1:
-                                st.metric("PDFs", f"~{pdf_tokens} tokens")
-                                st.metric("Examples", f"~{examples_tokens} tokens")
-                                st.metric("Prompt", f"~{prompt_tokens} tokens")
+                                st.metric("PDFs (estimated)", f"~{measurement['estimated_pdf_tokens']} tokens")
+                                st.metric("Base content", f"{measurement['base_tokens']} tokens")
                             
                             with col2:
-                                st.metric("Total", f"{measurement['total_tokens']} tokens")
+                                st.metric("Total (estimated)", f"~{measurement['total_tokens']} tokens")
                                 max_tokens = 8192
                                 st.progress(min(1.0, measurement['total_tokens'] / max_tokens))
-                                st.caption(f"Using {measurement['total_tokens']}/{max_tokens} tokens")
+                                st.caption(f"Using ~{measurement['total_tokens']}/{max_tokens} tokens")
+                            
+                            st.info("Note: PDF token counts are estimated and may not be exact.")
                             
                             # Display message content
                             st.subheader("Message Content Preview")
