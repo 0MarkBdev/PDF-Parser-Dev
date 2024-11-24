@@ -3,6 +3,7 @@ import pandas as pd
 from anthropic import Anthropic
 import base64
 import json
+from typing import List, Dict, Any
 
 TEMPLATES = {
     "Water Bills": [
@@ -98,13 +99,69 @@ def render_field_controls(i: int):
             st.rerun()
 
 
+# Add this function after the check_password function
+def construct_message_content(uploaded_files: List[Any], include_calculations: bool, prompt: str) -> List[Dict]:
+    """Constructs the message content that would be sent to Claude"""
+    message_content = []
+    
+    # Add each PDF document
+    for pdf in uploaded_files:
+        pdf_bytes = pdf.read()
+        pdf.seek(0)  # Reset file pointer after reading
+        message_content.append({
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": base64.b64encode(pdf_bytes).decode()
+            }
+        })
+    
+    # Add examples and prompt
+    message_content.extend([
+        {
+            "type": "text",
+            "text": calculations_examples if include_calculations else simple_examples
+        },
+        {
+            "type": "text",
+            "text": prompt
+        }
+    ])
+    
+    return message_content
+
+
+# Add this function after construct_message_content
+def measure_api_call(message_content: List[Dict]) -> Dict:
+    """Measures the token count for a potential API call"""
+    try:
+        token_count = Anthropic().beta.messages.count_tokens(
+            model="claude-3-5-sonnet-20241022",
+            messages=[{
+                "role": "user",
+                "content": message_content
+            }]
+        )
+        return {
+            "success": True,
+            "total_tokens": token_count.input_tokens,
+            "message_content": message_content
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 # Main app
 def main():
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
-    # Create tabs for main content and debug info
-    main_tab, debug_tab = st.tabs(["Main", "Debug Info"])
+    # Create tabs for main content, call measuring, and debug info
+    main_tab, measure_tab, debug_tab = st.tabs(["Main", "Call Measuring", "Debug Info"])
 
     with main_tab:
         # Create the interface
@@ -688,11 +745,66 @@ Provide ONLY the JSON array as your final output, with no additional text."""
                 except Exception as e:
                     st.error(f"Error processing files: {str(e)}")
 
-        # Debug tab content
+        # Add the Call Measuring tab content
+        with measure_tab:
+            st.header("API Call Measurement")
+            
+            if uploaded_files:
+                st.write(f"Files ready to measure: {', '.join(f.name for f in uploaded_files)}")
+                
+                if st.button("Measure Call", key="measure_call_button"):
+                    with st.spinner("Measuring API call..."):
+                        # Construct message content
+                        message_content = construct_message_content(
+                            uploaded_files,
+                            include_calculations,
+                            prompt
+                        )
+                        
+                        # Measure the call
+                        measurement = measure_api_call(message_content)
+                        
+                        if measurement["success"]:
+                            st.success(f"Total tokens: {measurement['total_tokens']}")
+                            
+                            # Display token breakdown
+                            st.subheader("Token Breakdown")
+                            col1, col2 = st.columns(2)
+                            
+                            # Calculate approximate token counts for each component
+                            pdf_tokens = sum(len(content["source"]["data"]) // 4 
+                                           for content in message_content 
+                                           if content["type"] == "document")
+                            
+                            examples_tokens = len(calculations_examples if include_calculations 
+                                                else simple_examples) // 4
+                            prompt_tokens = len(prompt) // 4
+                            
+                            with col1:
+                                st.metric("PDFs", f"~{pdf_tokens} tokens")
+                                st.metric("Examples", f"~{examples_tokens} tokens")
+                                st.metric("Prompt", f"~{prompt_tokens} tokens")
+                            
+                            with col2:
+                                st.metric("Total", f"{measurement['total_tokens']} tokens")
+                                max_tokens = 8192
+                                st.progress(min(1.0, measurement['total_tokens'] / max_tokens))
+                                st.caption(f"Using {measurement['total_tokens']}/{max_tokens} tokens")
+                            
+                            # Display message content
+                            st.subheader("Message Content Preview")
+                            with st.expander("Show full message content"):
+                                st.json(message_content)
+                        else:
+                            st.error(f"Error measuring call: {measurement['error']}")
+            else:
+                st.info("Upload files in the main tab to measure the API call")
+
+        # Remove the measurement functionality from debug tab and keep only the last usage info
         with debug_tab:
             st.header("API Usage Information")
             if hasattr(st.session_state, 'last_usage'):
-                st.write("Last API Call Statistics:")
+                st.subheader("Last API Call Statistics")
                 st.write(f"Input Tokens: {st.session_state.last_usage['input_tokens']}")
                 st.write(f"Output Tokens: {st.session_state.last_usage['output_tokens']}")
                 
