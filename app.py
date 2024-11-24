@@ -233,7 +233,7 @@ def measure_api_call(message_content: List[Dict]) -> Dict:
     """Measures the token count for a potential API call"""
     try:
         # Create a modified version of message_content for token counting
-        # Replace document content with placeholder text
+        # that only includes text content
         counting_content = []
         pdf_sizes = []
         
@@ -241,11 +241,14 @@ def measure_api_call(message_content: List[Dict]) -> Dict:
             if content["type"] == "document":
                 # Store the original PDF size for estimation
                 pdf_sizes.append(len(content["source"]["data"]))
-                # Skip documents for token counting
-                continue
-            counting_content.append(content)
+            elif content["type"] == "text":
+                # Only include text content for the token count
+                counting_content.append({
+                    "type": "text",
+                    "text": content["text"]
+                })
         
-        # Get token count for non-document content
+        # Get token count for text content only
         token_count = Anthropic().beta.messages.count_tokens(
             model="claude-3-5-sonnet-20241022",
             messages=[{
@@ -264,7 +267,7 @@ def measure_api_call(message_content: List[Dict]) -> Dict:
             "total_tokens": total_estimated_tokens,
             "base_tokens": token_count.input_tokens,
             "estimated_pdf_tokens": estimated_pdf_tokens,
-            "message_content": message_content
+            "message_content": message_content  # Keep original content for display
         }
     except Exception as e:
         return {
