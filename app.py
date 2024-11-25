@@ -463,6 +463,7 @@ def count_tokens(client, prompt, include_calculations):
                 "tools": []  # Include empty tools array as per spec
             },
             headers={
+                "x-api-key": st.secrets["ANTHROPIC_API_KEY"],  # Added API key here
                 "anthropic-beta": "token-counting-2024-11-01",
                 "anthropic-version": "2024-01-01"
             }
