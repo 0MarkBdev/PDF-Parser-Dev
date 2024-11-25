@@ -46,77 +46,160 @@ CALCULATIONS_EXAMPLES = """<examples>
     <example>
         <utility_bill_content>
             CLEARWATER UTILITIES
-            789 River Road, Springville, USA 67890
+            123 River Road, Springville, TX 75001
 
-            Customer: Sarah Johnson
-            Account Number: 9876543210
-            Service Address: 321 Pine Street, Springville, USA 67890
+            Customer: Sarah Rodriguez
+            Account Number: 1234567890-01
+            Service Address: 456 Lakeside Ave, Springville, TX 75001
+            Billing Period: 06/20/2023 to 07/19/2023
+            Statement Date: 07/20/2023
+            Due Date: 08/10/2023
 
-            Bill Date: 08/20/2023
-            Due Date: 09/10/2023
+            METER INFORMATION
+            Current Read (07/19/2023 14:30 CST): 68,950
+            Previous Read (06/20/2023 14:15 CST): 65,200
+            Total Usage: 3,750 gallons
 
-            Billing Period: 07/20/2023 to 08/19/2023
+            WATER CONSUMPTION CHARGES
+            Tier 1 (Essential Use): 0-1,000 gallons @ $2.25/1,000 gal
+                Usage: 1,000 gallons = $2.25
+            Tier 2 (Standard Use): 1,001-2,000 gallons @ $2.75/1,000 gal
+                Usage: 1,000 gallons = $2.75
+            Tier 3 (Enhanced Use): 2,001-3,000 gallons @ $3.25/1,000 gal
+                Usage: 1,000 gallons = $3.25
+            Tier 4 (Peak Use): 3,001-3,750 gallons @ $3.75/1,000 gal
+                Usage: 750 gallons = $2.81
 
-            Meter Readings:
-            Current Read (08/19/2023): 73,450
-            Previous Read (07/20/2023): 67,800
-            Total Usage: 5,650 gallons
+            FIXED SERVICE FEES
+            Base Infrastructure Maintenance: $8.25
+            Smart Meter Technology Fee: $2.50
+            System Reliability Charge: $3.75
+            Emergency Response Readiness: $1.75
+            Total Fixed Service Fees: $16.25
 
-            Charges:
-            Water Service Charge:
-              0-2,000 gallons @ $3.00 per 1,000 gallons: $6.00
-              2,001-5,000 gallons @ $3.50 per 1,000 gallons: $10.50
-              5,001-5,650 gallons @ $4.00 per 1,000 gallons: $2.60
-              Total Water Service Charge: $19.10
+            SEWER SERVICE
+            Peak Season Adjustment: June 20-30
+                Subtotal June: $8.25
+            Standard Season: July 1-19
+                Subtotal July: $12.50
 
-            Water Infrastructure Surcharge: $7.50
-            Wastewater Treatment Charge: $22.00
-            Storm Water Management Fee: $5.00
-            Environmental Compliance Fee: $1.75
+            WATER QUALITY ASSURANCE
+            Basic Testing: $1.25
+            Enhanced Monitoring: $0.75
+            Compliance Reporting: $0.50
+            Subtotal: $2.50
 
-            Total Current Charges: $55.35
+            STORM WATER MANAGEMENT
+            Base Fee: $2.00
+            Impervious Surface Charge: $1.25
+            Watershed Protection: $0.75
 
-            Previous Balance: $55.35
-            Payments Received: $55.35
+            REGIONAL AUTHORITY CHARGES
+            Water Rights Assessment: $0.50
+            Infrastructure Cost Share: $0.45
+            Drought Management: $0.30
+            Conservation Programs: $0.25
+            Total Regional Charges: $1.50
 
-            Total Amount Due: $55.35
-
-            To avoid service interruption, please pay by the due date.
-            For billing inquiries, contact us at 1-888-555-6789.
+            Previous Balance: $55.75
+            Payment Received: -$55.75
+            Current Charges: $55.81
+            Total Amount Due: $56.25
         </utility_bill_content>
         <Field_inputted_by_user>
             {
-              "Start Date": "",
-              "End Date": "",
+              "Bill Date": "",
+              "Billing Period Start": "",
+              "Billing Period End": "",
               "Account Number": "",
-              "Current Meter Read": "",
-              "Previous Meter Read": "",
-              "Total Water Usage": "",
-              "Water Service Charge": "",
-              "Water Infrastructure Surcharge": "",
-              "Wastewater Treatment Charge": "",
-              "Storm Water Management Fee": "",
-              "Environmental Compliance Fee": "",
+              "Current Meter Reading": "",
+              "Previous Meter Reading": "",
+              "Total Water Consumption": "",
+              "Water Usage Charge": "",
+              "Fixed Service Fee": "",
+              "Sewer Service": "",
+              "Water Quality Assurance Fee": "",
+              "Storm Water Management": "",
+              "Regional Water Authority Charge": "",
               "Total Current Charges": ""
             }
         </Field_inputted_by_user>
         <ideal_output>
             {
-              "Start Date": "07/20/2023",
-              "End Date": "08/19/2023",
-              "Account Number": "9876543210",
-              "Current Meter Read": 73450,
-              "Previous Meter Read": 67800,
-              "Total Water Usage": 5650,
-              "Water Service Charge": 6.00,
-              "Water Service Charge_2": 10.50,
-              "Water Service Charge_3": 2.60,
-              "Water Service Charge_Total": 19.10,
-              "Water Infrastructure Surcharge": 7.50,
-              "Wastewater Treatment Charge": 22.00,
-              "Storm Water Management Fee": 5.00,
-              "Environmental Compliance Fee": 1.75,
-              "Total Current Charges": 55.35
+              "fields": [
+                "Bill Date",
+                "Billing Period Start",
+                "Billing Period End",
+                "Account Number",
+                "Current Meter Reading",
+                "Previous Meter Reading",
+                "Total Water Consumption",
+                "Water Usage Charge",
+                "Water Usage Charge_2",
+                "Water Usage Charge_3",
+                "Water Usage Charge_4",
+                "Water Usage Charge_CalcTotal",
+                "Fixed Service Fee",
+                "Fixed Service Fee_2",
+                "Fixed Service Fee_3",
+                "Fixed Service Fee_4",
+                "Fixed Service Fee_Total",
+                "Sewer Service",
+                "Sewer Service_2",
+                "Sewer Service_CalcTotal",
+                "Water Quality Assurance Fee",
+                "Water Quality Assurance Fee_2",
+                "Water Quality Assurance Fee_3",
+                "Water Quality Assurance Fee_Total",
+                "Storm Water Management",
+                "Storm Water Management_2",
+                "Storm Water Management_3",
+                "Storm Water Management_CalcTotal",
+                "Regional Water Authority Charge",
+                "Regional Water Authority Charge_2",
+                "Regional Water Authority Charge_3",
+                "Regional Water Authority Charge_4",
+                "Regional Water Authority Charge_Total",
+                "Total Current Charges"
+              ],
+              "bills": [
+                [
+                  "07/20/2023",
+                  "06/20/2023",
+                  "07/19/2023",
+                  "1234567890-01",
+                  68950,
+                  65200,
+                  3750,
+                  2.25,
+                  2.75,
+                  3.25,
+                  2.81,
+                  11.06,
+                  8.25,
+                  2.50,
+                  3.75,
+                  1.75,
+                  16.25,
+                  8.25,
+                  12.50,
+                  20.75,
+                  1.25,
+                  0.75,
+                  0.50,
+                  2.50,
+                  2.00,
+                  1.25,
+                  0.75,
+                  4.00,
+                  0.50,
+                  0.45,
+                  0.30,
+                  0.25,
+                  1.50,
+                  55.81
+                ]
+              ]
             }
         </ideal_output>
     </example>
@@ -126,13 +209,122 @@ CALCULATIONS_EXAMPLES = """<examples>
 SIMPLE_EXAMPLES = """<examples>
     <example>
         <utility_bill_content>
-            # Add your simple example here
+            CLEARWATER UTILITIES
+            123 River Road, Springville, TX 75001
+
+            Customer: Sarah Rodriguez
+            Account Number: 1234567890-01
+            Service Address: 456 Lakeside Ave, Springville, TX 75001
+            Billing Period: 06/20/2023 to 07/19/2023
+            Statement Date: 07/20/2023
+            Due Date: 08/10/2023
+
+            METER INFORMATION
+            Current Read (07/19/2023 14:30 CST): 68,950
+            Previous Read (06/20/2023 14:15 CST): 65,200
+            Total Usage: 3,750 gallons
+
+            WATER CONSUMPTION CHARGES
+            Tier 1 (Essential Use): 0-1,000 gallons @ $2.25/1,000 gal
+                Usage: 1,000 gallons = $2.25
+            Tier 2 (Standard Use): 1,001-2,000 gallons @ $2.75/1,000 gal
+                Usage: 1,000 gallons = $2.75
+            Tier 3 (Enhanced Use): 2,001-3,000 gallons @ $3.25/1,000 gal
+                Usage: 1,000 gallons = $3.25
+            Tier 4 (Peak Use): 3,001-3,750 gallons @ $3.75/1,000 gal
+                Usage: 750 gallons = $2.81
+
+            FIXED SERVICE FEES
+            Base Infrastructure Maintenance: $8.25
+            Smart Meter Technology Fee: $2.50
+            System Reliability Charge: $3.75
+            Emergency Response Readiness: $1.75
+            Total Fixed Service Fees: $16.25
+
+            SEWER SERVICE
+            Peak Season Adjustment: June 20-30
+                Subtotal June: $8.25
+            Standard Season: July 1-19
+                Subtotal July: $12.50
+
+            WATER QUALITY ASSURANCE
+            Basic Testing: $1.25
+            Enhanced Monitoring: $0.75
+            Compliance Reporting: $0.50
+            Subtotal: $2.50
+
+            STORM WATER MANAGEMENT
+            Base Fee: $2.00
+            Impervious Surface Charge: $1.25
+            Watershed Protection: $0.75
+
+            REGIONAL AUTHORITY CHARGES
+            Water Rights Assessment: $0.50
+            Infrastructure Cost Share: $0.45
+            Drought Management: $0.30
+            Conservation Programs: $0.25
+            Total Regional Charges: $1.50
+
+            Previous Balance: $55.75
+            Payment Received: -$55.75
+            Current Charges: $55.81
+            Total Amount Due: $56.25
         </utility_bill_content>
         <Field_inputted_by_user>
-            # Add corresponding input fields
+            {
+              "Bill Date": "",
+              "Billing Period Start": "",
+              "Billing Period End": "",
+              "Account Number": "",
+              "Current Meter Reading": "",
+              "Previous Meter Reading": "",
+              "Total Water Consumption": "",
+              "Water Usage Charge": "",
+              "Fixed Service Fee": "",
+              "Sewer Service": "",
+              "Water Quality Assurance Fee": "",
+              "Storm Water Management": "",
+              "Regional Water Authority Charge": "",
+              "Total Current Charges": ""
+            }
         </Field_inputted_by_user>
         <ideal_output>
-            # Add simple JSON output
+            {
+              "fields": [
+                "Bill Date",
+                "Billing Period Start",
+                "Billing Period End",
+                "Account Number",
+                "Current Meter Reading",
+                "Previous Meter Reading",
+                "Total Water Consumption",
+                "Water Usage Charge_CalcTotal",
+                "Fixed Service Fee_Total",
+                "Sewer Service_CalcTotal",
+                "Water Quality Assurance Fee_Total",
+                "Storm Water Management_CalcTotal",
+                "Regional Water Authority Charge_Total",
+                "Total Current Charges"
+              ],
+              "bills": [
+                [
+                  "07/20/2023",
+                  "06/20/2023",
+                  "07/19/2023",
+                  "1234567890-01",
+                  68950,
+                  65200,
+                  3750,
+                  11.06,
+                  16.25,
+                  20.75,
+                  2.50,
+                  4.00,
+                  1.50,
+                  55.81
+                ]
+              ]
+            }
         </ideal_output>
     </example>
 </examples>"""
@@ -238,6 +430,46 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
     }
     
     return api_call_preview
+
+
+# Add this new function after preview_api_call()
+def count_tokens(prompt, include_calculations):
+    """Generate a token count for the API call without PDFs"""
+    # Prepare message content without PDFs
+    message_content = [
+        {
+            "type": "text",
+            "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+        },
+        {
+            "type": "text",
+            "text": prompt
+        }
+    ]
+    
+    # Construct the token counting request
+    token_count_request = {
+        "model": "claude-3-5-sonnet-20241022",
+        "system": "You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+        "messages": [
+            {
+                "role": "user",
+                "content": message_content
+            }
+        ]
+    }
+    
+    # Make the token counting API call
+    response = client.post(
+        "https://api.anthropic.com/v1/messages/count_tokens",
+        json=token_count_request,
+        headers={
+            "anthropic-beta": "token-counting-2024-11-01",
+            "anthropic-version": "2024-01-01"
+        }
+    )
+    
+    return response.json()
 
 
 # Main app
@@ -357,8 +589,6 @@ Special Instructions:
 
 3. If a field is not found in the bill, use null as the value.
 
-Before providing the final JSON output double-check that all extracted values are correctly formatted.
-
 Return the data in this structure:
 {{
     "fields": {list(field_dict.keys())},
@@ -421,7 +651,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         model="claude-3-5-sonnet-20241022",
                         max_tokens=8192,  # Fixed token limit
                         temperature=0,
-                        system="You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Processing multiple utility bills simultaneously while keeping each bill's data separate and organized.\n2. Accurately extracting specific fields from each bill.\n3. Handling complex cases such as tiered charges.\n4. Maintaining consistent formatting across all extracted data.\n5. Returning data as a JSON array where each bill is represented as a separate object.\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data across various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
+                        system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
                         messages=[
                             {
                                 "role": "user",
@@ -476,10 +706,30 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                 st.write("Preview the API call that will be sent when processing files")
                 
                 if uploaded_files:
-                    if st.button("Generate API Call Preview"):
-                        preview = preview_api_call(uploaded_files, prompt, include_calculations)
-                        st.session_state.api_preview = preview
-                        st.json(preview)
+                    # Create a row with two buttons
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Generate API Call Preview"):
+                            preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                            st.session_state.api_preview = preview
+                            st.json(preview)
+                    
+                    with col2:
+                        if st.button("Preview Api Call & Count Tokens"):
+                            # Show API preview
+                            preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                            st.session_state.api_preview = preview
+                            st.json(preview)
+                            
+                            # Get and show token count
+                            try:
+                                token_count = count_tokens(prompt, include_calculations)
+                                st.success("Token Count Results:")
+                                st.metric("Input Tokens (excluding PDFs)", token_count["input_tokens"])
+                                st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                            except Exception as e:
+                                st.error(f"Error counting tokens: {str(e)}")
                 else:
                     st.info("Upload files in the main tab to preview the API call")
             
