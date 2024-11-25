@@ -669,7 +669,7 @@ def main():
 5. Compile the final JSON output in a nested format.
 
 Required Fields for each bill:
-{json.dumps(field_dict, indent=2)}
+[${list(field_dict.keys())[0]}, ${list(field_dict.keys())[1]}, ${list(field_dict.keys())[2]}, ...]
 
 Special Instructions:
 1. For charges that show a tiered calculation breakdown (like water service charges):{tiered_calculation_instructions}
@@ -685,7 +685,7 @@ Special Instructions:
 
 Return the data in this structure:
 {{
-    "fields": {list(field_dict.keys())},
+    "fields": [Field1, Field2, ...],  // Field names in order
     "bills": [
         [null, null, ...],  // Bill 1 values in same order as fields
         [null, null, ...],  // Bill 2 values
