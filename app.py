@@ -802,10 +802,20 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     
                     # Convert merged response to DataFrame format
                     all_results = []
-                    for bill_values, pdf in zip(merged_response['bills'], uploaded_files):
-                        bill_dict = dict(zip(merged_response['fields'], bill_values))
-                        bill_dict['filename'] = pdf.name
-                        all_results.append(bill_dict)
+                    file_index = 0  # Keep track of which file we're processing
+
+                    for bill_values in merged_response['bills']:
+                        if file_index < len(uploaded_files):
+                            bill_dict = dict(zip(merged_response['fields'], bill_values))
+                            bill_dict['filename'] = uploaded_files[file_index].name
+                            all_results.append(bill_dict)
+                            file_index += 1
+                        else:
+                            st.warning(f"Found more bills in response than uploaded files. Extra bill data: {bill_values}")
+
+                    # Check if we processed all files
+                    if file_index < len(uploaded_files):
+                        st.warning(f"Not all files were processed. Processed {file_index} out of {len(uploaded_files)} files.")
 
                     # Create DataFrame and store in session state
                     df = pd.DataFrame(all_results)
