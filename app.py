@@ -683,25 +683,48 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
-                            # Parse response
-                            response_data = json.loads(message.content[0].text)
+                            # Parse response - handle direct JSON response
+                            try:
+                                # First try to parse as a complete response format
+                                response_data = json.loads(message.content[0].text)
+                                
+                                # Check if it's already in the right format
+                                if isinstance(response_data, dict):
+                                    response_data['filename'] = pdf_file.name
+                                    individual_results.append(response_data)
+                                # If it's in the fields/bills format
+                                elif response_data.get('bills') and len(response_data['bills']) > 0:
+                                    bill_dict = dict(zip(response_data['fields'], response_data['bills'][0]))
+                                    bill_dict['filename'] = pdf_file.name
+                                    individual_results.append(bill_dict)
 
-                            # Update variable name in results handling
-                            if response_data.get('bills') and len(response_data['bills']) > 0:
-                                bill_dict = dict(zip(response_data['fields'], response_data['bills'][0]))
-                                bill_dict['filename'] = pdf_file.name
-                                individual_results.append(bill_dict)
-
-                            # Log successful API call
-                            st.session_state.api_logs.append(
-                                log_api_call(pdf_file, {
+                                # Update logging to handle both formats
+                                log_data = {
                                     "parsed_response": response_data,
                                     "raw_response": message.model_dump(),
-                                    "num_bills_returned": len(response_data.get("bills", [])),
                                     "file_processed": pdf_file.name,
-                                    "fields_returned": response_data.get("fields", [])
-                                })
-                            )
+                                }
+
+                                # Add format-specific logging data
+                                if isinstance(response_data, dict):
+                                    log_data.update({
+                                        "num_bills_returned": 1,
+                                        "fields_returned": list(response_data.keys())
+                                    })
+                                else:
+                                    log_data.update({
+                                        "num_bills_returned": len(response_data.get("bills", [])),
+                                        "fields_returned": response_data.get("fields", [])
+                                    })
+
+                                # Log successful API call
+                                st.session_state.api_logs.append(
+                                    log_api_call(pdf_file, log_data)
+                                )
+
+                            except json.JSONDecodeError as e:
+                                st.error(f"Error parsing response for {pdf_file.name}: {str(e)}")
+                                continue
 
                         except Exception as e:
                             # Log failed API call
