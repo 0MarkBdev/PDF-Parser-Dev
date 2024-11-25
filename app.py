@@ -448,21 +448,29 @@ def count_tokens(client, prompt, include_calculations):
     ]
     
     try:
-        # Use the client's messages.count_tokens method
-        response = client.messages.count_tokens(
-            model="claude-3-5-sonnet-20241022",
-            system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
-            messages=[
-                {
-                    "role": "user",
-                    "content": message_content
-                }
-            ],
-            tools=[]  # Include empty tools array as per spec
+        # Use the client's direct request method
+        response = client._client.post(
+            "https://api.anthropic.com/v1/messages/count_tokens",
+            json={
+                "model": "claude-3-5-sonnet-20241022",
+                "system": "You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": message_content
+                    }
+                ],
+                "tools": []  # Include empty tools array as per spec
+            },
+            headers={
+                "anthropic-beta": "token-counting-2024-11-01",
+                "anthropic-version": "2024-01-01"
+            }
         )
         
+        result = response.json()
         return {
-            "input_tokens": response.input_tokens
+            "input_tokens": result["input_tokens"]
         }
         
     except Exception as e:
