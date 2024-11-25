@@ -488,7 +488,7 @@ def calculate_pdf_tokens(pdf_file) -> int:
     """Estimate token count for a PDF based on file size"""
     pdf_size_kb = len(pdf_file.read()) / 1024  # Convert bytes to KB
     pdf_file.seek(0)  # Reset file pointer
-    return math.ceil(pdf_size_kb * 65)  # 65 tokens per KB
+    return math.ceil(pdf_size_kb * 75)  # 75 tokens per KB
 
 def batch_pdfs(uploaded_files, token_limit=40000) -> List[List]:
     """
