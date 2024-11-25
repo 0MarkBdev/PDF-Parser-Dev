@@ -468,10 +468,13 @@ def count_tokens(client, prompt, include_calculations):
             }
         )
         
+        # Print response for debugging
+        print("API Response:", response.text)
+        
         result = response.json()
-        return {
-            "input_tokens": result["input_tokens"]
-        }
+        
+        # Return the raw result instead of trying to access input_tokens
+        return result
         
     except Exception as e:
         # Wrap any errors with more context
@@ -724,7 +727,9 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                             try:
                                 token_count = count_tokens(client, prompt, include_calculations)
                                 st.success("Token Count Results:")
-                                st.metric("Input Tokens (excluding PDFs)", token_count["input_tokens"])
+                                # Print the full response for debugging
+                                print("Token count response:", token_count)
+                                st.json(token_count)  # Show the full response
                                 st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
                             except Exception as e:
                                 st.error(f"Error counting tokens: {str(e)}")
