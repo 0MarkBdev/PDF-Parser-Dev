@@ -494,16 +494,20 @@ def calculate_pdf_tokens(pdf_file) -> int:
 def batch_pdfs(uploaded_files, token_limit=40000) -> List[List]:
     """
     Group PDFs into batches that stay under the token limit.
+    Files are sorted by name pattern first to keep similar formats together.
     Returns list of lists, where each inner list contains PDFs for one batch.
     """
+    # Sort files by filename pattern to keep similar formats together
+    sorted_files = sorted(uploaded_files, key=lambda x: x.name.split('-')[0])
+    
     batches = []
     current_batch = []
     current_batch_tokens = 0
     
     # Calculate base tokens from examples and system message (approximate)
-    base_tokens = 3000  # Adjust this based on actual usage
+    base_tokens = 3000  
     
-    for pdf in uploaded_files:
+    for pdf in sorted_files:
         pdf_tokens = calculate_pdf_tokens(pdf)
         
         # If adding this PDF would exceed limit, start new batch
@@ -724,7 +728,11 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         default_headers={"anthropic-beta": "pdfs-2024-09-25"}
                     )
 
-                    # Replace the existing PDF processing code with this:
+                    # Initialize problematic batches tracking
+                    if 'problematic_batches' not in st.session_state:
+                        st.session_state.problematic_batches = []
+                    st.session_state.problematic_batches = []
+
                     batches = batch_pdfs(uploaded_files)
                     all_responses = []
                     st.session_state.api_logs = []  # Reset logs for new processing
@@ -778,12 +786,24 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                             # Parse response
                             response_data = json.loads(message.content[0].text)
                             
+                            # Validate response
+                            if len(response_data.get('bills', [])) != len(batch):
+                                st.warning(f"Batch {i+1}: Number of bills ({len(response_data.get('bills', []))}) "
+                                        f"doesn't match number of files ({len(batch)})")
+                                # Log problematic batch
+                                st.session_state.problematic_batches.append({
+                                    'batch_number': i+1,
+                                    'files': [f.name for f in batch],
+                                    'response': response_data
+                                })
+                            
                             # Log successful API call
                             st.session_state.api_logs.append(
                                 log_api_call(i + 1, batch, {
                                     "parsed_response": response_data,
                                     "raw_response": message.model_dump(),
                                     "num_bills_returned": len(response_data.get("bills", [])),
+                                    "files_processed": [f.name for f in batch],
                                     "fields_returned": response_data.get("fields", [])
                                 })
                             )
@@ -796,6 +816,11 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 log_api_call(i + 1, batch, None, str(e))
                             )
                             raise e
+
+                    # After processing all batches, check for problems
+                    if st.session_state.problematic_batches:
+                        st.error(f"Found {len(st.session_state.problematic_batches)} problematic batches. "
+                               f"Check the Debug tab for details.")
 
                     # Merge all responses
                     merged_response = merge_responses(all_responses)
@@ -925,6 +950,18 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         st.markdown("---")
                 else:
                     st.info("No API calls logged yet.")
+
+            with st.expander("⚠️ Problematic Batches", expanded=True):
+                if hasattr(st.session_state, 'problematic_batches') and st.session_state.problematic_batches:
+                    for batch in st.session_state.problematic_batches:
+                        st.markdown(f"### Batch {batch['batch_number']}")
+                        st.markdown("**Files in batch:**")
+                        st.write(batch['files'])
+                        st.markdown("**Response data:**")
+                        st.json(batch['response'])
+                        st.markdown("---")
+                else:
+                    st.info("No problematic batches detected in the last processing run.")
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
