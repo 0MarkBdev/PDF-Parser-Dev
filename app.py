@@ -376,15 +376,12 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         # Add file uploader
         uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
 
-        # Add this near the start of main() function
-        if 'processing_status' not in st.session_state:
-            st.session_state.processing_status = None
-
         # Process Bills button logic
         if st.button('Process Bills'):
             if uploaded_files:
+                # Create a status container outside the try block
                 status_container = st.empty()
-                status_container.text("Processing files...")
+                status_container.info("Processing files...")
 
                 try:
                     # Create the client with custom headers
@@ -463,14 +460,14 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         st.session_state.results_df = df
                         
                         # Update processing status
-                        st.session_state.processing_status = f"{len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''} processed!"
-                        status_container.text(st.session_state.processing_status)
+                        status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
 
                     except json.JSONDecodeError as je:
+                        status_container.error("Error: Could not parse JSON response from API")
                         st.warning(f"Could not parse JSON response. Raw response: {message.content[0].text}")
 
                 except Exception as e:
-                    st.error(f"Error processing files: {str(e)}")
+                    status_container.error(f"Error processing files: {str(e)}")
 
         # Debug tab content
         with debug_tab:
@@ -515,14 +512,6 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     st.code(st.session_state.raw_json_response, language='json')
                 else:
                     st.write("No API response data available yet.")
-
-    # Display processing status if it exists
-    if st.session_state.get('processing_status'):
-        st.text(st.session_state.processing_status)
-
-    # Reset processing status if new files are uploaded
-    if uploaded_files:
-        st.session_state.processing_status = None
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
