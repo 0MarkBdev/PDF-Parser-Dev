@@ -856,14 +856,24 @@ Provide ONLY the JSON object as your final output, with no additional text."""
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
-        # Group and sort columns by base names
+        # Get the original field order from session state
+        original_fields = [field for field, _ in st.session_state.fields if field]
+        
+        # Group and sort columns by base names while preserving original field order
         def get_base_name(col):
             # Skip filename column
             if col == 'filename':
                 return '0_filename'  # Ensure filename stays first
             # Split on underscore and get base name
             parts = col.split('_')
-            return '_'.join(parts[:-1]) if len(parts) > 1 else col
+            base = '_'.join(parts[:-1]) if len(parts) > 1 else col
+            # Get the original position of the base field
+            try:
+                original_pos = original_fields.index(base)
+            except ValueError:
+                # If base not in original fields, put it at the end
+                original_pos = len(original_fields)
+            return f"{original_pos:03d}_{base}"
 
         def get_suffix_priority(col):
             # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
@@ -881,7 +891,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             }
             return priorities.get(suffix, 50)  # Default priority for unknown suffixes
 
-        # Sort columns first by base name, then by suffix priority
+        # Sort columns first by original field order (via base name), then by suffix priority
         columns = st.session_state.results_df.columns.tolist()
         sorted_columns = sorted(
             columns,
