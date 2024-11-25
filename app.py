@@ -856,16 +856,51 @@ Provide ONLY the JSON object as your final output, with no additional text."""
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
-        # Create Excel file
+        # Group and sort columns by base names
+        def get_base_name(col):
+            # Skip filename column
+            if col == 'filename':
+                return '0_filename'  # Ensure filename stays first
+            # Split on underscore and get base name
+            parts = col.split('_')
+            return '_'.join(parts[:-1]) if len(parts) > 1 else col
+
+        def get_suffix_priority(col):
+            # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
+            if col == 'filename':
+                return -1  # Ensure filename stays first
+            if '_' not in col:
+                return 0
+            suffix = col.split('_')[-1]
+            priorities = {
+                '2': 1,
+                '3': 2,
+                '4': 3,
+                'Total': 98,
+                'CalcTotal': 99
+            }
+            return priorities.get(suffix, 50)  # Default priority for unknown suffixes
+
+        # Sort columns first by base name, then by suffix priority
+        columns = st.session_state.results_df.columns.tolist()
+        sorted_columns = sorted(
+            columns,
+            key=lambda x: (get_base_name(x), get_suffix_priority(x))
+        )
+
+        # Reorder the DataFrame columns
+        df_sorted = st.session_state.results_df[sorted_columns]
+        
+        # Create Excel file with sorted columns
         excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
-        st.session_state.results_df.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
+        df_sorted.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
 
         # Auto-adjust column widths more safely
         worksheet = excel_buffer.sheets['Extracted Data']
-        for idx, col in enumerate(st.session_state.results_df.columns):
+        for idx, col in enumerate(df_sorted.columns):
             # Get max length of column data and column header
             max_length = max(
-                st.session_state.results_df[col].astype(str).apply(len).max(),
+                df_sorted[col].astype(str).apply(len).max(),
                 len(str(col))
             )
             # Limit column width to a reasonable maximum (e.g., 50 characters)
@@ -887,9 +922,9 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
 
-        # Display the results in the app
+        # Display the results in the app with sorted columns
         st.write("### Extracted Data")
-        st.dataframe(st.session_state.results_df)
+        st.dataframe(df_sorted)
 
 
 # Run the app with password protection
