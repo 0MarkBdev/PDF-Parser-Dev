@@ -432,8 +432,8 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
     return api_call_preview
 
 
-# Add this new function after preview_api_call()
-def count_tokens(prompt, include_calculations):
+# Modify the count_tokens function to accept client as a parameter
+def count_tokens(client, prompt, include_calculations):
     """Generate a token count for the API call without PDFs"""
     # Prepare message content without PDFs
     message_content = [
@@ -706,30 +706,30 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                 st.write("Preview the API call that will be sent when processing files")
                 
                 if uploaded_files:
-                    # Create a row with two buttons
-                    col1, col2 = st.columns(2)
+                    col1, col2 = st.columns([1, 1])
                     
-                    with col1:
-                        if st.button("Generate API Call Preview"):
-                            preview = preview_api_call(uploaded_files, prompt, include_calculations)
-                            st.session_state.api_preview = preview
-                            st.json(preview)
+                    # Create buttons side by side but keep display area unified
+                    preview_clicked = col1.button("Generate API Call Preview")
+                    count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
                     
-                    with col2:
-                        if st.button("Preview Api Call & Count Tokens"):
-                            # Show API preview
-                            preview = preview_api_call(uploaded_files, prompt, include_calculations)
-                            st.session_state.api_preview = preview
-                            st.json(preview)
-                            
-                            # Get and show token count
+                    if preview_clicked or count_tokens_clicked:
+                        # If token counting was requested, show it first
+                        if count_tokens_clicked:
                             try:
-                                token_count = count_tokens(prompt, include_calculations)
+                                token_count = count_tokens(client, prompt, include_calculations)
                                 st.success("Token Count Results:")
                                 st.metric("Input Tokens (excluding PDFs)", token_count["input_tokens"])
                                 st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
                             except Exception as e:
                                 st.error(f"Error counting tokens: {str(e)}")
+                            
+                            # Add a visual separator
+                            st.markdown("---")
+                        
+                        # Show the API preview (same for both buttons)
+                        preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                        st.session_state.api_preview = preview
+                        st.json(preview)
                 else:
                     st.info("Upload files in the main tab to preview the API call")
             
