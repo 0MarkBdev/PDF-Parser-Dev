@@ -669,7 +669,7 @@ def main():
 5. Compile the final JSON output in a nested format.
 
 Required Fields for each bill:
-[${list(field_dict.keys())[0]}, ${list(field_dict.keys())[1]}, ${list(field_dict.keys())[2]}, ...]
+{list(field_dict.keys())}
 
 Special Instructions:
 1. For charges that show a tiered calculation breakdown (like water service charges):{tiered_calculation_instructions}
