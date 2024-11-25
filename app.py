@@ -3,6 +3,8 @@ import pandas as pd
 from anthropic import Anthropic
 import base64
 import json
+from typing import List, Dict
+import math
 
 TEMPLATES = {
     "Water Bills": [
@@ -482,6 +484,88 @@ def count_tokens(client, prompt, include_calculations):
         raise Exception(f"Token counting API error: {str(e)}") from e
 
 
+def calculate_pdf_tokens(pdf_file) -> int:
+    """Estimate token count for a PDF based on file size"""
+    pdf_size_kb = len(pdf_file.read()) / 1024  # Convert bytes to KB
+    pdf_file.seek(0)  # Reset file pointer
+    return math.ceil(pdf_size_kb * 60)  # 60 tokens per KB
+
+def batch_pdfs(uploaded_files, token_limit=40000) -> List[List]:
+    """
+    Group PDFs into batches that stay under the token limit.
+    Returns list of lists, where each inner list contains PDFs for one batch.
+    """
+    batches = []
+    current_batch = []
+    current_batch_tokens = 0
+    
+    # Calculate base tokens from examples and system message (approximate)
+    base_tokens = 3000  # Adjust this based on actual usage
+    
+    for pdf in uploaded_files:
+        pdf_tokens = calculate_pdf_tokens(pdf)
+        
+        # If adding this PDF would exceed limit, start new batch
+        if current_batch_tokens + pdf_tokens + base_tokens > token_limit:
+            if current_batch:  # Only append if batch has files
+                batches.append(current_batch)
+            current_batch = [pdf]
+            current_batch_tokens = pdf_tokens
+        else:
+            current_batch.append(pdf)
+            current_batch_tokens += pdf_tokens
+    
+    # Add final batch if not empty
+    if current_batch:
+        batches.append(current_batch)
+    
+    return batches
+
+def merge_responses(responses: List[Dict]) -> Dict:
+    """
+    Merge multiple API responses into a single consistent format,
+    handling different column structures.
+    """
+    # Collect all unique fields across all responses
+    all_fields = set()
+    for response in responses:
+        all_fields.update(response['fields'])
+    
+    # Sort fields to maintain consistent order
+    # Keep base fields first, then numbered variations
+    def field_sort_key(field):
+        # Split field into base name and suffix
+        parts = field.split('_')
+        base = parts[0]
+        suffix = parts[1] if len(parts) > 1 else ''
+        # Sort by base name first, then suffix
+        return (base, suffix)
+    
+    sorted_fields = sorted(all_fields, key=field_sort_key)
+    
+    # Merge all bills data
+    merged_bills = []
+    for response in responses:
+        field_map = {f: i for i, f in enumerate(response['fields'])}
+        
+        for bill_values in response['bills']:
+            # Create a dict with all fields set to null
+            merged_bill = [None] * len(sorted_fields)
+            
+            # Fill in the values we have
+            for new_idx, field in enumerate(sorted_fields):
+                if field in field_map:
+                    orig_idx = field_map[field]
+                    if orig_idx < len(bill_values):
+                        merged_bill[new_idx] = bill_values[orig_idx]
+            
+            merged_bills.append(merged_bill)
+    
+    return {
+        'fields': sorted_fields,
+        'bills': merged_bills
+    }
+
 # Main app
 def main():
     # Get API key from secrets
@@ -619,7 +703,6 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         # Process Bills button logic
         if st.button('Process Bills'):
             if uploaded_files:
-                # Create a status container outside the try block
                 status_container = st.empty()
                 status_container.info("Processing files...")
 
@@ -630,81 +713,76 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         default_headers={"anthropic-beta": "pdfs-2024-09-25"}
                     )
 
-                    # Prepare all PDFs in the message content
-                    message_content = []
+                    # Replace the existing PDF processing code with this:
+                    batches = batch_pdfs(uploaded_files)
+                    all_responses = []
                     
-                    # Add each PDF document
-                    for pdf in uploaded_files:
-                        message_content.append({
-                            "type": "document",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "application/pdf",
-                                "data": base64.b64encode(pdf.read()).decode()
-                            }
-                        })
-
-                    # Add the existing examples and prompt
-                    message_content.extend([
-                        {
-                            "type": "text",
-                            "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ])
-
-                    # Send to Claude API
-                    message = pdf_client.messages.create(
-                        model="claude-3-5-sonnet-20241022",
-                        max_tokens=8192,  # Fixed token limit
-                        temperature=0,
-                        system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
-                        messages=[
+                    # Process each batch
+                    for i, batch in enumerate(batches):
+                        status_container.info(f"Processing batch {i+1} of {len(batches)}...")
+                        
+                        # Prepare message content for this batch
+                        message_content = []
+                        
+                        # Add PDFs for this batch
+                        for pdf in batch:
+                            message_content.append({
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": base64.b64encode(pdf.read()).decode()
+                                }
+                            })
+                            pdf.seek(0)  # Reset file pointer
+                        
+                        # Add examples and prompt
+                        message_content.extend([
                             {
-                                "role": "user",
-                                "content": message_content
+                                "type": "text",
+                                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
                             }
-                        ]
-                    )
+                        ])
 
-                    # Store usage info in session state for debug tab
-                    st.session_state.last_usage = {
-                        'input_tokens': message.usage.input_tokens,
-                        'output_tokens': message.usage.output_tokens,
-                        'stop_reason': message.stop_reason
-                    }
+                        # Send to Claude API
+                        message = pdf_client.messages.create(
+                            model="claude-3-5-sonnet-20241022",
+                            max_tokens=8192,
+                            temperature=0,
+                            system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": message_content
+                                }
+                            ]
+                        )
 
-                    # Parse the JSON response
-                    try:
+                        # Parse response and add to responses list
                         response_data = json.loads(message.content[0].text)
-                        # Store raw JSON for debug tab
-                        st.session_state.raw_json_response = message.content[0].text
-                        
-                        # Convert the nested format back to flat format for DataFrame
-                        all_results = []
-                        for bill_values in response_data['bills']:
-                            bill_dict = dict(zip(response_data['fields'], bill_values))
-                            all_results.append(bill_dict)
-                        
-                        # Add filenames to the extracted data
-                        for result, pdf in zip(all_results, uploaded_files):
-                            result['filename'] = pdf.name
+                        all_responses.append(response_data)
 
-                        # Convert to DataFrame and store in session state
-                        df = pd.DataFrame(all_results)
-                        columns = ['filename'] + [col for col in df.columns if col != 'filename']
-                        df = df[columns]
-                        st.session_state.results_df = df
-                        
-                        # Update processing status
-                        status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
+                    # Merge all responses
+                    merged_response = merge_responses(all_responses)
+                    
+                    # Convert merged response to DataFrame format
+                    all_results = []
+                    for bill_values, pdf in zip(merged_response['bills'], uploaded_files):
+                        bill_dict = dict(zip(merged_response['fields'], bill_values))
+                        bill_dict['filename'] = pdf.name
+                        all_results.append(bill_dict)
 
-                    except json.JSONDecodeError as je:
-                        status_container.error("Error: Could not parse JSON response from API")
-                        st.warning(f"Could not parse JSON response. Raw response: {message.content[0].text}")
+                    # Create DataFrame and store in session state
+                    df = pd.DataFrame(all_results)
+                    columns = ['filename'] + [col for col in df.columns if col != 'filename']
+                    df = df[columns]
+                    st.session_state.results_df = df
+                    
+                    status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
 
                 except Exception as e:
                     status_container.error(f"Error processing files: {str(e)}")
