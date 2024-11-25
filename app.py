@@ -863,7 +863,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         def get_base_name(col):
             # Skip filename column
             if col == 'filename':
-                return '0_filename'  # Ensure filename stays first
+                return '000_filename'  # Changed to ensure filename is always first
             # Split on underscore and get base name
             parts = col.split('_')
             base = '_'.join(parts[:-1]) if len(parts) > 1 else col
@@ -873,7 +873,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             except ValueError:
                 # If base not in original fields, put it at the end
                 original_pos = len(original_fields)
-            return f"{original_pos:03d}_{base}"
+            return f"{original_pos + 1:03d}_{base}"  # Added +1 to make room for filename
 
         def get_suffix_priority(col):
             # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
