@@ -447,7 +447,7 @@ def count_tokens(client, prompt, include_calculations):
         }
     ]
     
-    # Construct the token counting request
+    # Construct the token counting request following the exact API specification
     token_count_request = {
         "model": "claude-3-5-sonnet-20241022",
         "system": "You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
@@ -456,20 +456,38 @@ def count_tokens(client, prompt, include_calculations):
                 "role": "user",
                 "content": message_content
             }
-        ]
+        ],
+        "tools": []  # Added empty tools array to match API spec
     }
     
-    # Make the token counting API call
-    response = client.post(
-        "https://api.anthropic.com/v1/messages/count_tokens",
-        json=token_count_request,
-        headers={
-            "anthropic-beta": "token-counting-2024-11-01",
-            "anthropic-version": "2024-01-01"
-        }
-    )
-    
-    return response.json()
+    try:
+        # Make the token counting API call using the client's http_client
+        response = client.http_client.post(
+            "https://api.anthropic.com/v1/messages/count_tokens",
+            json=token_count_request,
+            headers={
+                "x-api-key": client.api_key,
+                "anthropic-beta": "token-counting-2024-11-01",
+                "anthropic-version": "2024-01-01",
+                "content-type": "application/json"
+            }
+        )
+        
+        # Check if the response is successful
+        response.raise_for_status()
+        
+        # Parse and return the response
+        result = response.json()
+        
+        # Verify we got the expected field
+        if "input_tokens" not in result:
+            raise ValueError("Unexpected response format from token counting API")
+            
+        return result
+        
+    except Exception as e:
+        # Wrap any HTTP or JSON parsing errors with more context
+        raise Exception(f"Token counting API error: {str(e)}") from e
 
 
 # Main app
@@ -722,6 +740,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
                             except Exception as e:
                                 st.error(f"Error counting tokens: {str(e)}")
+                                st.error("Please check the API documentation or try again later.")
                             
                             # Add a visual separator
                             st.markdown("---")
