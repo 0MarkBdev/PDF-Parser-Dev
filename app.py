@@ -3,8 +3,9 @@ import pandas as pd
 from anthropic import Anthropic
 import base64
 import json
-from typing import List, Dict
+from typing import List, Dict, Any
 import math
+from datetime import datetime
 
 TEMPLATES = {
     "Water Bills": [
@@ -566,6 +567,16 @@ def merge_responses(responses: List[Dict]) -> Dict:
         'bills': merged_bills
     }
 
+def log_api_call(batch_number: int, files: List[Any], response: Any, error: str = None) -> dict:
+    """Log an API call and its response"""
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "batch_number": batch_number,
+        "files_processed": [f.name for f in files],
+        "response": response,
+        "error": error
+    }
+
 # Main app
 def main():
     # Get API key from secrets
@@ -716,6 +727,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     # Replace the existing PDF processing code with this:
                     batches = batch_pdfs(uploaded_files)
                     all_responses = []
+                    st.session_state.api_logs = []  # Reset logs for new processing
                     
                     # Process each batch
                     for i, batch in enumerate(batches):
@@ -748,23 +760,42 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                             }
                         ])
 
-                        # Send to Claude API
-                        message = pdf_client.messages.create(
-                            model="claude-3-5-sonnet-20241022",
-                            max_tokens=8192,
-                            temperature=0,
-                            system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
-                            messages=[
-                                {
-                                    "role": "user",
-                                    "content": message_content
-                                }
-                            ]
-                        )
+                        try:
+                            # Send to Claude API
+                            message = pdf_client.messages.create(
+                                model="claude-3-5-sonnet-20241022",
+                                max_tokens=8192,
+                                temperature=0,
+                                system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+                                messages=[
+                                    {
+                                        "role": "user",
+                                        "content": message_content
+                                    }
+                                ]
+                            )
 
-                        # Parse response and add to responses list
-                        response_data = json.loads(message.content[0].text)
-                        all_responses.append(response_data)
+                            # Parse response
+                            response_data = json.loads(message.content[0].text)
+                            
+                            # Log successful API call
+                            st.session_state.api_logs.append(
+                                log_api_call(i + 1, batch, {
+                                    "parsed_response": response_data,
+                                    "raw_response": message.model_dump(),
+                                    "num_bills_returned": len(response_data.get("bills", [])),
+                                    "fields_returned": response_data.get("fields", [])
+                                })
+                            )
+                            
+                            all_responses.append(response_data)
+
+                        except Exception as e:
+                            # Log failed API call
+                            st.session_state.api_logs.append(
+                                log_api_call(i + 1, batch, None, str(e))
+                            )
+                            raise e
 
                     # Merge all responses
                     merged_response = merge_responses(all_responses)
@@ -853,6 +884,31 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     st.code(st.session_state.raw_json_response, language='json')
                 else:
                     st.write("No API response data available yet.")
+
+            with st.expander("📋 API Call Logs", expanded=True):
+                if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
+                    for log in st.session_state.api_logs:
+                        st.markdown(f"### Batch {log['batch_number']}")
+                        st.markdown("**Files Processed:**")
+                        st.write(log['files_processed'])
+                        st.markdown("**Timestamp:**")
+                        st.write(log['timestamp'])
+                        
+                        if log['error']:
+                            st.error(f"**Error:** {log['error']}")
+                        else:
+                            st.markdown("**Number of Bills Returned:**")
+                            st.write(log['response']['num_bills_returned'])
+                            st.markdown("**Fields Returned:**")
+                            st.write(log['response']['fields_returned'])
+                            
+                            with st.expander("View Raw Response"):
+                                st.json(log['response']['raw_response'])
+                            
+                            with st.expander("View Parsed Response"):
+                                st.json(log['response']['parsed_response'])
+                else:
+                    st.info("No API calls logged yet.")
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
