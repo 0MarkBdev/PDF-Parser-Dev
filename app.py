@@ -860,14 +860,21 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
         st.session_state.results_df.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
 
-        # Auto-adjust column widths
+        # Auto-adjust column widths more safely
         worksheet = excel_buffer.sheets['Extracted Data']
         for idx, col in enumerate(st.session_state.results_df.columns):
+            # Get max length of column data and column header
             max_length = max(
                 st.session_state.results_df[col].astype(str).apply(len).max(),
                 len(str(col))
             )
-            worksheet.column_dimensions[chr(65 + idx)].width = max_length + 2
+            # Limit column width to a reasonable maximum (e.g., 50 characters)
+            adjusted_width = min(max_length + 2, 50)
+            # Convert numeric index to Excel column letter
+            col_letter = chr(65 + (idx % 26))
+            if idx >= 26:
+                col_letter = chr(64 + (idx // 26)) + col_letter
+            worksheet.column_dimensions[col_letter].width = adjusted_width
 
         excel_buffer.close()
 
