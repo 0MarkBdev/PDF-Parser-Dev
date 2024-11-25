@@ -3,7 +3,7 @@ import pandas as pd
 from anthropic import Anthropic
 import base64
 import json
-from typing import List, Dict, Any
+from typing import Any
 import math
 from datetime import datetime
 
@@ -420,7 +420,7 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
         "model": "claude-3-5-sonnet-20241022",
         "max_tokens": 8192,  # Fixed token limit
         "temperature": 0,
-        "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Processing multiple utility bills simultaneously while keeping each bill's data separate and organized.\n2. Accurately extracting specific fields from each bill.\n3. Handling complex cases such as tiered charges.\n4. Maintaining consistent formatting across all extracted data.\n5. Returning data as a JSON array where each bill is represented as a separate object.\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data across various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
+        "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
         "messages": [
             {
                 "role": "user",
@@ -456,7 +456,7 @@ def count_tokens(client, prompt, include_calculations):
             "https://api.anthropic.com/v1/messages/count_tokens",
             json={
                 "model": "claude-3-5-sonnet-20241022",
-                "system": "You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+                "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
                 "messages": [
                     {
                         "role": "user",
@@ -491,112 +491,11 @@ def calculate_pdf_tokens(pdf_file) -> int:
     pdf_file.seek(0)  # Reset file pointer
     return math.ceil(pdf_size_kb * 75)  # 75 tokens per KB
 
-def batch_pdfs(uploaded_files, token_limit=40000) -> List[List]:
-    """
-    Group PDFs into batches that stay under the token limit and max 3 files per batch.
-    Files are sorted by name pattern first to keep similar formats together.
-    Returns list of lists, where each inner list contains PDFs for one batch.
-    """
-    # Sort files by filename pattern to keep similar formats together
-    # Extract the pattern before any numbers/dates (e.g., "WaterBill" from "WaterBill-2023-01.pdf")
-    def get_file_pattern(filename):
-        # Split on common delimiters and take the first part
-        pattern = filename.split('-')[0].split('_')[0].split('.')[0]
-        return ''.join(c for c in pattern if c.isalpha()).lower()
-    
-    sorted_files = sorted(uploaded_files, key=lambda x: get_file_pattern(x.name))
-    
-    batches = []
-    current_batch = []
-    current_batch_tokens = 0
-    current_pattern = None
-    
-    # Calculate base tokens from examples and system message (approximate)
-    base_tokens = 3000
-    
-    for pdf in sorted_files:
-        pdf_tokens = calculate_pdf_tokens(pdf)
-        file_pattern = get_file_pattern(pdf.name)
-        
-        # Start new batch if any of these conditions are met:
-        # 1. Current batch would exceed token limit
-        # 2. Current batch already has 3 files
-        # 3. Current file has different pattern from current batch
-        should_start_new_batch = (
-            (current_batch_tokens + pdf_tokens + base_tokens > token_limit) or
-            (len(current_batch) >= 3) or
-            (current_pattern and file_pattern != current_pattern)
-        )
-        
-        if should_start_new_batch:
-            if current_batch:  # Only append if batch has files
-                batches.append(current_batch)
-            current_batch = [pdf]
-            current_batch_tokens = pdf_tokens
-            current_pattern = file_pattern
-        else:
-            current_batch.append(pdf)
-            current_batch_tokens += pdf_tokens
-            if not current_pattern:
-                current_pattern = file_pattern
-    
-    # Add final batch if not empty
-    if current_batch:
-        batches.append(current_batch)
-    
-    return batches
-
-def merge_responses(responses: List[Dict]) -> Dict:
-    """
-    Merge multiple API responses into a single consistent format,
-    handling different column structures.
-    """
-    # Collect all unique fields across all responses
-    all_fields = set()
-    for response in responses:
-        all_fields.update(response['fields'])
-    
-    # Sort fields to maintain consistent order
-    # Keep base fields first, then numbered variations
-    def field_sort_key(field):
-        # Split field into base name and suffix
-        parts = field.split('_')
-        base = parts[0]
-        suffix = parts[1] if len(parts) > 1 else ''
-        # Sort by base name first, then suffix
-        return (base, suffix)
-    
-    sorted_fields = sorted(all_fields, key=field_sort_key)
-    
-    # Merge all bills data
-    merged_bills = []
-    for response in responses:
-        field_map = {f: i for i, f in enumerate(response['fields'])}
-        
-        for bill_values in response['bills']:
-            # Create a dict with all fields set to null
-            merged_bill = [None] * len(sorted_fields)
-            
-            # Fill in the values we have
-            for new_idx, field in enumerate(sorted_fields):
-                if field in field_map:
-                    orig_idx = field_map[field]
-                    if orig_idx < len(bill_values):
-                        merged_bill[new_idx] = bill_values[orig_idx]
-            
-            merged_bills.append(merged_bill)
-    
-    return {
-        'fields': sorted_fields,
-        'bills': merged_bills
-    }
-
-def log_api_call(batch_number: int, files: List[Any], response: Any, error: str = None) -> dict:
+def log_api_call(file: Any, response: Any, error: str = None) -> dict:
     """Log an API call and its response"""
     return {
         "timestamp": datetime.now().isoformat(),
-        "batch_number": batch_number,
-        "files_processed": [f.name for f in files],
+        "file_processed": file.name,
         "response": response,
         "error": error
     }
@@ -695,38 +594,30 @@ def main():
        a. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
        b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
 
-        prompt = f"""Your objective is to extract key information from utility bills and present it in a standardized nested JSON format. Follow these steps:
+        prompt = f"""Your objective is to extract key information from this utility bill and present it in a standardized JSON format. Follow these steps:
 
-1. Carefully analyze each utility bill content separately.
-2. Identify and extract the required fields for each bill.
+1. Carefully analyze the utility bill content.
+2. Identify and extract the required fields.
 3. Format the extracted information according to the specifications.
 4. Handle any tiered charges appropriately.
-5. Compile the final JSON output in a nested format.
+5. Compile the final JSON output.
 
-Required Fields for each bill:
-{list(field_dict.keys())}
+Required Fields:
+{json.dumps(field_dict, indent=2)}
 
 Special Instructions:
 1. For charges that show a tiered calculation breakdown (like water service charges):{tiered_calculation_instructions}
 
 2. Formatting Rules:
-   - Use a nested format with "fields" and "bills" as main keys
-   - Place field definitions once in the "fields" array
-   - Place each bill's data in the "bills" array
+   - Each field should be a separate key at the root level of the JSON
+   - Do not nest the values in sub-objects
    - Return each amount as a plain number
    - Do not include gallons, rates, or date ranges
 
 3. If a field is not found in the bill, use null as the value.
 
 Return the data in this structure:
-{{
-    "fields": [Field1, Field2, ...],  // Field names in order
-    "bills": [
-        [null, null, ...],  // Bill 1 values in same order as fields
-        [null, null, ...],  // Bill 2 values
-        // ... one array per bill ...
-    ]
-}}
+{json.dumps(field_dict, indent=2)}
 
 Remember to replace the null values with the actual extracted data or keep as null if the information is not found in the bill.
 
@@ -739,7 +630,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         if st.button('Process Bills'):
             if uploaded_files:
                 status_container = st.empty()
-                status_container.info("Processing files...")
+                status_container.info("Processing files one at a time...")
 
                 try:
                     # Create the client with custom headers
@@ -748,36 +639,24 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         default_headers={"anthropic-beta": "pdfs-2024-09-25"}
                     )
 
-                    # Initialize problematic batches tracking
-                    if 'problematic_batches' not in st.session_state:
-                        st.session_state.problematic_batches = []
-                    st.session_state.problematic_batches = []
+                    # Change variable name from processed_results to be clearer about individual processing
+                    individual_results = []  # Changed from processed_results for clarity
+                    st.session_state.api_logs = []
 
-                    batches = batch_pdfs(uploaded_files)
-                    all_responses = []
-                    st.session_state.api_logs = []  # Reset logs for new processing
-                    
-                    # Process each batch
-                    for i, batch in enumerate(batches):
-                        status_container.info(f"Processing batch {i+1} of {len(batches)}...")
+                    # Process each PDF individually
+                    for file_index, pdf_file in enumerate(uploaded_files):
+                        status_container.info(f"Processing file {file_index + 1} of {len(uploaded_files)}: {pdf_file.name}")
                         
-                        # Prepare message content for this batch
-                        message_content = []
-                        
-                        # Add PDFs for this batch
-                        for pdf in batch:
-                            message_content.append({
+                        # Prepare message content for this PDF
+                        message_content = [
+                            {
                                 "type": "document",
                                 "source": {
                                     "type": "base64",
                                     "media_type": "application/pdf",
-                                    "data": base64.b64encode(pdf.read()).decode()
+                                    "data": base64.b64encode(pdf_file.read()).decode()
                                 }
-                            })
-                            pdf.seek(0)  # Reset file pointer
-                        
-                        # Add examples and prompt
-                        message_content.extend([
+                            },
                             {
                                 "type": "text",
                                 "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
@@ -786,7 +665,8 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 "type": "text",
                                 "text": prompt
                             }
-                        ])
+                        ]
+                        pdf_file.seek(0)  # Reset file pointer
 
                         try:
                             # Send to Claude API
@@ -794,7 +674,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 model="claude-3-5-sonnet-20241022",
                                 max_tokens=8192,
                                 temperature=0,
-                                system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+                                system="You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
                                 messages=[
                                     {
                                         "role": "user",
@@ -805,70 +685,42 @@ Provide ONLY the JSON object as your final output, with no additional text."""
 
                             # Parse response
                             response_data = json.loads(message.content[0].text)
-                            
-                            # Validate response
-                            if len(response_data.get('bills', [])) != len(batch):
-                                st.warning(f"Batch {i+1}: Number of bills ({len(response_data.get('bills', []))}) "
-                                        f"doesn't match number of files ({len(batch)})")
-                                # Log problematic batch
-                                st.session_state.problematic_batches.append({
-                                    'batch_number': i+1,
-                                    'files': [f.name for f in batch],
-                                    'response': response_data
-                                })
-                            
+
+                            # Update variable name in results handling
+                            if response_data.get('bills') and len(response_data['bills']) > 0:
+                                bill_dict = dict(zip(response_data['fields'], response_data['bills'][0]))
+                                bill_dict['filename'] = pdf_file.name
+                                individual_results.append(bill_dict)
+
                             # Log successful API call
                             st.session_state.api_logs.append(
-                                log_api_call(i + 1, batch, {
+                                log_api_call(pdf_file, {
                                     "parsed_response": response_data,
                                     "raw_response": message.model_dump(),
                                     "num_bills_returned": len(response_data.get("bills", [])),
-                                    "files_processed": [f.name for f in batch],
+                                    "file_processed": pdf_file.name,
                                     "fields_returned": response_data.get("fields", [])
                                 })
                             )
-                            
-                            all_responses.append(response_data)
 
                         except Exception as e:
                             # Log failed API call
                             st.session_state.api_logs.append(
-                                log_api_call(i + 1, batch, None, str(e))
+                                log_api_call(pdf_file, None, str(e))
                             )
-                            raise e
+                            st.error(f"Error processing {pdf_file.name}: {str(e)}")
+                            continue
 
-                    # After processing all batches, check for problems
-                    if st.session_state.problematic_batches:
-                        st.error(f"Found {len(st.session_state.problematic_batches)} problematic batches. "
-                               f"Check the Debug tab for details.")
-
-                    # Merge all responses
-                    merged_response = merge_responses(all_responses)
-                    
-                    # Convert merged response to DataFrame format
-                    all_results = []
-                    file_index = 0  # Keep track of which file we're processing
-
-                    for bill_values in merged_response['bills']:
-                        if file_index < len(uploaded_files):
-                            bill_dict = dict(zip(merged_response['fields'], bill_values))
-                            bill_dict['filename'] = uploaded_files[file_index].name
-                            all_results.append(bill_dict)
-                            file_index += 1
-                        else:
-                            st.warning(f"Found more bills in response than uploaded files. Extra bill data: {bill_values}")
-
-                    # Check if we processed all files
-                    if file_index < len(uploaded_files):
-                        st.warning(f"Not all files were processed. Processed {file_index} out of {len(uploaded_files)} files.")
-
-                    # Create DataFrame and store in session state
-                    df = pd.DataFrame(all_results)
-                    columns = ['filename'] + [col for col in df.columns if col != 'filename']
-                    df = df[columns]
-                    st.session_state.results_df = df
-                    
-                    status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
+                    # Create DataFrame from individual results
+                    if individual_results:
+                        df = pd.DataFrame(individual_results)
+                        columns = ['filename'] + [col for col in df.columns if col != 'filename']
+                        df = df[columns]
+                        st.session_state.results_df = df
+                        
+                        status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
+                    else:
+                        status_container.error("No data was successfully extracted from the files.")
 
                 except Exception as e:
                     status_container.error(f"Error processing files: {str(e)}")
@@ -943,9 +795,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             with st.expander("📋 API Call Logs", expanded=True):
                 if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
                     for log in st.session_state.api_logs:
-                        st.markdown(f"### Batch {log['batch_number']}")
-                        st.markdown("**Files Processed:**")
-                        st.write(log['files_processed'])
+                        st.markdown(f"### File: {log['file_processed']}")
                         st.markdown("**Timestamp:**")
                         st.write(log['timestamp'])
                         
@@ -966,22 +816,20 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                             with parsed_tab:
                                 st.json(log['response']['parsed_response'])
                             
-                        # Add a visual separator between batches
+                        # Add a visual separator between files
                         st.markdown("---")
                 else:
                     st.info("No API calls logged yet.")
 
-            with st.expander("⚠️ Problematic Batches", expanded=True):
-                if hasattr(st.session_state, 'problematic_batches') and st.session_state.problematic_batches:
-                    for batch in st.session_state.problematic_batches:
-                        st.markdown(f"### Batch {batch['batch_number']}")
-                        st.markdown("**Files in batch:**")
-                        st.write(batch['files'])
+            with st.expander("⚠️ Problematic Files", expanded=True):
+                if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
+                    for file_log in st.session_state.problematic_files:
+                        st.markdown(f"### File: {file_log['filename']}")
                         st.markdown("**Response data:**")
-                        st.json(batch['response'])
+                        st.json(file_log['response'])
                         st.markdown("---")
                 else:
-                    st.info("No problematic batches detected in the last processing run.")
+                    st.info("No problematic files detected in the last processing run.")
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
