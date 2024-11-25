@@ -902,11 +902,17 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                             st.markdown("**Fields Returned:**")
                             st.write(log['response']['fields_returned'])
                             
-                            with st.expander("View Raw Response"):
+                            # Use tabs instead of nested expanders
+                            raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
+                            
+                            with raw_tab:
                                 st.json(log['response']['raw_response'])
                             
-                            with st.expander("View Parsed Response"):
+                            with parsed_tab:
                                 st.json(log['response']['parsed_response'])
+                            
+                        # Add a visual separator between batches
+                        st.markdown("---")
                 else:
                     st.info("No API calls logged yet.")
 
