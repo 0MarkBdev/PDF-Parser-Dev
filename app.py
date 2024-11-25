@@ -447,46 +447,26 @@ def count_tokens(client, prompt, include_calculations):
         }
     ]
     
-    # Construct the token counting request following the exact API specification
-    token_count_request = {
-        "model": "claude-3-5-sonnet-20241022",
-        "system": "You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
-        "messages": [
-            {
-                "role": "user",
-                "content": message_content
-            }
-        ],
-        "tools": []  # Added empty tools array to match API spec
-    }
-    
     try:
-        # Make the token counting API call using the client's http_client
-        response = client.http_client.post(
-            "https://api.anthropic.com/v1/messages/count_tokens",
-            json=token_count_request,
-            headers={
-                "x-api-key": client.api_key,
-                "anthropic-beta": "token-counting-2024-11-01",
-                "anthropic-version": "2024-01-01",
-                "content-type": "application/json"
-            }
+        # Use the client's messages.count_tokens method
+        response = client.messages.count_tokens(
+            model="claude-3-5-sonnet-20241022",
+            system="You are a utility bill analysis expert focused on precise data extraction and standardization. You excel at processing multiple bills simultaneously, handling complex tiered charges, and maintaining consistent data formatting. Your primary goal is to extract specified fields and return properly structured JSON data while maintaining strict data integrity.",
+            messages=[
+                {
+                    "role": "user",
+                    "content": message_content
+                }
+            ],
+            tools=[]  # Include empty tools array as per spec
         )
         
-        # Check if the response is successful
-        response.raise_for_status()
-        
-        # Parse and return the response
-        result = response.json()
-        
-        # Verify we got the expected field
-        if "input_tokens" not in result:
-            raise ValueError("Unexpected response format from token counting API")
-            
-        return result
+        return {
+            "input_tokens": response.input_tokens
+        }
         
     except Exception as e:
-        # Wrap any HTTP or JSON parsing errors with more context
+        # Wrap any errors with more context
         raise Exception(f"Token counting API error: {str(e)}") from e
 
 
