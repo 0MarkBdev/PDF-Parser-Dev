@@ -493,32 +493,52 @@ def calculate_pdf_tokens(pdf_file) -> int:
 
 def batch_pdfs(uploaded_files, token_limit=40000) -> List[List]:
     """
-    Group PDFs into batches that stay under the token limit.
+    Group PDFs into batches that stay under the token limit and max 3 files per batch.
     Files are sorted by name pattern first to keep similar formats together.
     Returns list of lists, where each inner list contains PDFs for one batch.
     """
     # Sort files by filename pattern to keep similar formats together
-    sorted_files = sorted(uploaded_files, key=lambda x: x.name.split('-')[0])
+    # Extract the pattern before any numbers/dates (e.g., "WaterBill" from "WaterBill-2023-01.pdf")
+    def get_file_pattern(filename):
+        # Split on common delimiters and take the first part
+        pattern = filename.split('-')[0].split('_')[0].split('.')[0]
+        return ''.join(c for c in pattern if c.isalpha()).lower()
+    
+    sorted_files = sorted(uploaded_files, key=lambda x: get_file_pattern(x.name))
     
     batches = []
     current_batch = []
     current_batch_tokens = 0
+    current_pattern = None
     
     # Calculate base tokens from examples and system message (approximate)
-    base_tokens = 3000  
+    base_tokens = 3000
     
     for pdf in sorted_files:
         pdf_tokens = calculate_pdf_tokens(pdf)
+        file_pattern = get_file_pattern(pdf.name)
         
-        # If adding this PDF would exceed limit, start new batch
-        if current_batch_tokens + pdf_tokens + base_tokens > token_limit:
+        # Start new batch if any of these conditions are met:
+        # 1. Current batch would exceed token limit
+        # 2. Current batch already has 3 files
+        # 3. Current file has different pattern from current batch
+        should_start_new_batch = (
+            (current_batch_tokens + pdf_tokens + base_tokens > token_limit) or
+            (len(current_batch) >= 3) or
+            (current_pattern and file_pattern != current_pattern)
+        )
+        
+        if should_start_new_batch:
             if current_batch:  # Only append if batch has files
                 batches.append(current_batch)
             current_batch = [pdf]
             current_batch_tokens = pdf_tokens
+            current_pattern = file_pattern
         else:
             current_batch.append(pdf)
             current_batch_tokens += pdf_tokens
+            if not current_pattern:
+                current_pattern = file_pattern
     
     # Add final batch if not empty
     if current_batch:
