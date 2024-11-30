@@ -456,7 +456,7 @@ def count_tokens(client, prompt, include_calculations):
             "https://api.anthropic.com/v1/messages/count_tokens",
             json={
                 "model": "claude-3-5-sonnet-20241022",
-                "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
+                "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges and multiple instances of the same charge\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
                 "messages": [
                     {
                         "role": "user",
@@ -595,12 +595,12 @@ def main():
         field_dict = {field: "" for field, _ in st.session_state.fields if field}
 
         tiered_calculation_instructions = """
-       a. Use the plain field name for the first charge (e.g., "FIELD")
-       b. Add a suffix for each additional charge (e.g., "FIELD_2", "FIELD_3")
+       a. Use the plain field name for the first tiers/instances/charges (e.g., "FIELD")
+       b. Add a suffix for each additional tiers/instances/charges (e.g., "FIELD_2", "FIELD_3")
        c. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
-       d. If there isn't a clearly stated total, calculate and create one with the sum of the tiers. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal").""" if include_calculations else """
+       d. If there isn't a clearly stated total, calculate and create one with the sum of the tiers/instances/charges. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal").""" if include_calculations else """
        a. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
-       b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
+       b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers/instances/charges. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
 
         prompt = f"""Your objective is to extract key information from this utility bill and present it in a standardized JSON format. Follow these steps:
 
@@ -614,7 +614,7 @@ Required Fields:{f" to be extracted only for {meter_number}" if specify_meter an
 {json.dumps(field_dict, indent=2)}
 
 Special Instructions:
-1. For charges that show a tiered calculation breakdown (like water service charges):{tiered_calculation_instructions}
+1. For charges that show multiple charges with the main part of the name identical but with seasonal suffixes (e.g., "Charge A Summer", "Charge A Winter"), or tiered charges (like water service charges), or multiple instances of the same charge (when a rate changes in the middle of the bill period), or any other case where the same charge is shown multiple times with different values, use the following instructions:{tiered_calculation_instructions}
 
 2. Formatting Rules:
    - Each field should be a separate key at the root level of the JSON
