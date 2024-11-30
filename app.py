@@ -49,7 +49,7 @@ CALCULATIONS_EXAMPLES = """<examples>
     <example>
         <utility_bill_content>
             Bill Date: 2024-03-15
-            Account Number: 45297843
+            Account Number: AC-12345-B
 
             METER INFORMATION
             Current Read: 68,950
@@ -92,7 +92,7 @@ CALCULATIONS_EXAMPLES = """<examples>
         <ideal_output>
             {
               "Bill Date": "2024-03-15",
-              "Account Number": "45297843",
+              "Account Number": "AC-12345-B",
               "Current Meter Reading": 68950,
               "Previous Meter Reading": 65200,
               "Total Water Consumption": 3750,
@@ -118,7 +118,7 @@ SIMPLE_EXAMPLES = """<examples>
     <example>
         <utility_bill_content>
             Bill Date: 2024-03-15
-            Account Number: 45297843
+            Account Number: AC-12345-B
 
             METER INFORMATION
             Current Read: 68,950
@@ -161,7 +161,7 @@ SIMPLE_EXAMPLES = """<examples>
         <ideal_output>
             {
               "Bill Date": "2024-03-15",
-              "Account Number": "45297843",
+              "Account Number": "AC-12345-B",
               "Current Meter Reading": 68950,
               "Previous Meter Reading": 65200,
               "Total Water Consumption": 3750,
