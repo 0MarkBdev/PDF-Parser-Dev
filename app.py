@@ -48,161 +48,66 @@ TEMPLATES = {
 CALCULATIONS_EXAMPLES = """<examples>
     <example>
         <utility_bill_content>
-            CLEARWATER UTILITIES
-            123 River Road, Springville, TX 75001
-
-            Customer: Sarah Rodriguez
-            Account Number: 1234567890-01
-            Service Address: 456 Lakeside Ave, Springville, TX 75001
-            Billing Period: 06/20/2023 to 07/19/2023
-            Statement Date: 07/20/2023
-            Due Date: 08/10/2023
+            Bill Date: 2024-03-15
+            Account Number: 45297843
 
             METER INFORMATION
-            Current Read (07/19/2023 14:30 CST): 68,950
-            Previous Read (06/20/2023 14:15 CST): 65,200
+            Current Read: 68,950
+            Previous Read: 65,200
             Total Usage: 3,750 gallons
 
             WATER CONSUMPTION CHARGES
-            Tier 1 (Essential Use): 0-1,000 gallons @ $2.25/1,000 gal
-                Usage: 1,000 gallons = $2.25
-            Tier 2 (Standard Use): 1,001-2,000 gallons @ $2.75/1,000 gal
-                Usage: 1,000 gallons = $2.75
-            Tier 3 (Enhanced Use): 2,001-3,000 gallons @ $3.25/1,000 gal
-                Usage: 1,000 gallons = $3.25
-            Tier 4 (Peak Use): 3,001-3,750 gallons @ $3.75/1,000 gal
-                Usage: 750 gallons = $2.81
+            Tier 1 (0-1,000 gallons): $2.25
+            Tier 2 (1,001-2,000 gallons): $2.75
+            Tier 3 (2,001+ gallons): $3.25
+            Total Water Charges: $8.25
 
             FIXED SERVICE FEES
-            Base Infrastructure Maintenance: $8.25
-            Smart Meter Technology Fee: $2.50
-            System Reliability Charge: $3.75
-            Emergency Response Readiness: $1.75
-            Total Fixed Service Fees: $16.25
+            Base Infrastructure: $8.25
+            Technology Fee: $2.50
+            Technology Fee: $2.50
+            Total Fixed Fees: $13.25
 
-            SEWER SERVICE
-            Peak Season Adjustment: June 20-30
-                Subtotal June: $8.25
-            Standard Season: July 1-19
-                Subtotal July: $12.50
+            ELECTRICITY CONSUMPTION CHARGES
+            Capacity Charge Maximum Demand Winter: $12.50
+            Capacity Charge Maximum Demand Summer: $12.50
+            Total Electricity Charges: $25.00
 
-            WATER QUALITY ASSURANCE
-            Basic Testing: $1.25
-            Enhanced Monitoring: $0.75
-            Compliance Reporting: $0.50
-            Subtotal: $2.50
-
-            STORM WATER MANAGEMENT
-            Base Fee: $2.00
-            Impervious Surface Charge: $1.25
-            Watershed Protection: $0.75
-
-            REGIONAL AUTHORITY CHARGES
-            Water Rights Assessment: $0.50
-            Infrastructure Cost Share: $0.45
-            Drought Management: $0.30
-            Conservation Programs: $0.25
-            Total Regional Charges: $1.50
-
-            Previous Balance: $55.75
-            Payment Received: -$55.75
-            Current Charges: $55.81
-            Total Amount Due: $56.25
+            Total Current Charges: $46.50
         </utility_bill_content>
         <Field_inputted_by_user>
             {
               "Bill Date": "",
-              "Billing Period Start": "",
-              "Billing Period End": "",
               "Account Number": "",
               "Current Meter Reading": "",
               "Previous Meter Reading": "",
               "Total Water Consumption": "",
               "Water Usage Charge": "",
-              "Fixed Service Fee": "",
-              "Sewer Service": "",
-              "Water Quality Assurance Fee": "",
-              "Storm Water Management": "",
-              "Regional Water Authority Charge": "",
+              "Technology Fee": "",
+              "Capacity Charge Maximum Demand": "",
+              "Reactive Power Charge": "",
               "Total Current Charges": ""
             }
         </Field_inputted_by_user>
         <ideal_output>
             {
-              "fields": [
-                "Bill Date",
-                "Billing Period Start",
-                "Billing Period End",
-                "Account Number",
-                "Current Meter Reading",
-                "Previous Meter Reading",
-                "Total Water Consumption",
-                "Water Usage Charge",
-                "Water Usage Charge_2",
-                "Water Usage Charge_3",
-                "Water Usage Charge_4",
-                "Water Usage Charge_CalcTotal",
-                "Fixed Service Fee",
-                "Fixed Service Fee_2",
-                "Fixed Service Fee_3",
-                "Fixed Service Fee_4",
-                "Fixed Service Fee_Total",
-                "Sewer Service",
-                "Sewer Service_2",
-                "Sewer Service_CalcTotal",
-                "Water Quality Assurance Fee",
-                "Water Quality Assurance Fee_2",
-                "Water Quality Assurance Fee_3",
-                "Water Quality Assurance Fee_Total",
-                "Storm Water Management",
-                "Storm Water Management_2",
-                "Storm Water Management_3",
-                "Storm Water Management_CalcTotal",
-                "Regional Water Authority Charge",
-                "Regional Water Authority Charge_2",
-                "Regional Water Authority Charge_3",
-                "Regional Water Authority Charge_4",
-                "Regional Water Authority Charge_Total",
-                "Total Current Charges"
-              ],
-              "bills": [
-                [
-                  "07/20/2023",
-                  "06/20/2023",
-                  "07/19/2023",
-                  "1234567890-01",
-                  68950,
-                  65200,
-                  3750,
-                  2.25,
-                  2.75,
-                  3.25,
-                  2.81,
-                  11.06,
-                  8.25,
-                  2.50,
-                  3.75,
-                  1.75,
-                  16.25,
-                  8.25,
-                  12.50,
-                  20.75,
-                  1.25,
-                  0.75,
-                  0.50,
-                  2.50,
-                  2.00,
-                  1.25,
-                  0.75,
-                  4.00,
-                  0.50,
-                  0.45,
-                  0.30,
-                  0.25,
-                  1.50,
-                  55.81
-                ]
-              ]
+              "Bill Date": "2024-03-15",
+              "Account Number": "45297843",
+              "Current Meter Reading": 68950,
+              "Previous Meter Reading": 65200,
+              "Total Water Consumption": 3750,
+              "Water Usage Charge": 2.25,
+              "Water Usage Charge_2": 2.75,
+              "Water Usage Charge_3": 3.25,
+              "Water Usage Charge_CalcTotal": 8.25,
+              "Technology Fee": 2.50,
+              "Technology Fee_2": 2.50,
+              "Technology Fee_CalcTotal": 5.00,
+              "Capacity Charge Maximum Demand": 12.50,
+              "Capacity Charge Maximum Demand_2": 12.50,
+              "Capacity Charge Maximum Demand_CalcTotal": 25.00,
+              "Reactive Power Charge": null,
+              "Total Current Charges": 46.50
             }
         </ideal_output>
     </example>
@@ -212,121 +117,59 @@ CALCULATIONS_EXAMPLES = """<examples>
 SIMPLE_EXAMPLES = """<examples>
     <example>
         <utility_bill_content>
-            CLEARWATER UTILITIES
-            123 River Road, Springville, TX 75001
-
-            Customer: Sarah Rodriguez
-            Account Number: 1234567890-01
-            Service Address: 456 Lakeside Ave, Springville, TX 75001
-            Billing Period: 06/20/2023 to 07/19/2023
-            Statement Date: 07/20/2023
-            Due Date: 08/10/2023
+            Bill Date: 2024-03-15
+            Account Number: 45297843
 
             METER INFORMATION
-            Current Read (07/19/2023 14:30 CST): 68,950
-            Previous Read (06/20/2023 14:15 CST): 65,200
+            Current Read: 68,950
+            Previous Read: 65,200
             Total Usage: 3,750 gallons
 
             WATER CONSUMPTION CHARGES
-            Tier 1 (Essential Use): 0-1,000 gallons @ $2.25/1,000 gal
-                Usage: 1,000 gallons = $2.25
-            Tier 2 (Standard Use): 1,001-2,000 gallons @ $2.75/1,000 gal
-                Usage: 1,000 gallons = $2.75
-            Tier 3 (Enhanced Use): 2,001-3,000 gallons @ $3.25/1,000 gal
-                Usage: 1,000 gallons = $3.25
-            Tier 4 (Peak Use): 3,001-3,750 gallons @ $3.75/1,000 gal
-                Usage: 750 gallons = $2.81
+            Tier 1 (0-1,000 gallons): $2.25
+            Tier 2 (1,001-2,000 gallons): $2.75
+            Tier 3 (2,001+ gallons): $3.25
+            Total Water Charges: $8.25
 
             FIXED SERVICE FEES
-            Base Infrastructure Maintenance: $8.25
-            Smart Meter Technology Fee: $2.50
-            System Reliability Charge: $3.75
-            Emergency Response Readiness: $1.75
-            Total Fixed Service Fees: $16.25
+            Base Infrastructure: $8.25
+            Technology Fee: $2.50
+            Technology Fee: $2.50
+            Total Fixed Fees: $13.25
 
-            SEWER SERVICE
-            Peak Season Adjustment: June 20-30
-                Subtotal June: $8.25
-            Standard Season: July 1-19
-                Subtotal July: $12.50
+            ELECTRICITY CONSUMPTION CHARGES
+            Capacity Charge Maximum Demand Winter: $12.50
+            Capacity Charge Maximum Demand Summer: $12.50
+            Total Electricity Charges: $25.00
 
-            WATER QUALITY ASSURANCE
-            Basic Testing: $1.25
-            Enhanced Monitoring: $0.75
-            Compliance Reporting: $0.50
-            Subtotal: $2.50
-
-            STORM WATER MANAGEMENT
-            Base Fee: $2.00
-            Impervious Surface Charge: $1.25
-            Watershed Protection: $0.75
-
-            REGIONAL AUTHORITY CHARGES
-            Water Rights Assessment: $0.50
-            Infrastructure Cost Share: $0.45
-            Drought Management: $0.30
-            Conservation Programs: $0.25
-            Total Regional Charges: $1.50
-
-            Previous Balance: $55.75
-            Payment Received: -$55.75
-            Current Charges: $55.81
-            Total Amount Due: $56.25
+            Total Current Charges: $46.50
         </utility_bill_content>
         <Field_inputted_by_user>
             {
               "Bill Date": "",
-              "Billing Period Start": "",
-              "Billing Period End": "",
               "Account Number": "",
               "Current Meter Reading": "",
               "Previous Meter Reading": "",
               "Total Water Consumption": "",
               "Water Usage Charge": "",
-              "Fixed Service Fee": "",
-              "Sewer Service": "",
-              "Water Quality Assurance Fee": "",
-              "Storm Water Management": "",
-              "Regional Water Authority Charge": "",
+              "Technology Fee": "",
+              "Capacity Charge Maximum Demand": "",
+              "Reactive Power Charge": "",
               "Total Current Charges": ""
             }
         </Field_inputted_by_user>
         <ideal_output>
             {
-              "fields": [
-                "Bill Date",
-                "Billing Period Start",
-                "Billing Period End",
-                "Account Number",
-                "Current Meter Reading",
-                "Previous Meter Reading",
-                "Total Water Consumption",
-                "Water Usage Charge_CalcTotal",
-                "Fixed Service Fee_Total",
-                "Sewer Service_CalcTotal",
-                "Water Quality Assurance Fee_Total",
-                "Storm Water Management_CalcTotal",
-                "Regional Water Authority Charge_Total",
-                "Total Current Charges"
-              ],
-              "bills": [
-                [
-                  "07/20/2023",
-                  "06/20/2023",
-                  "07/19/2023",
-                  "1234567890-01",
-                  68950,
-                  65200,
-                  3750,
-                  11.06,
-                  16.25,
-                  20.75,
-                  2.50,
-                  4.00,
-                  1.50,
-                  55.81
-                ]
-              ]
+              "Bill Date": "2024-03-15",
+              "Account Number": "45297843",
+              "Current Meter Reading": 68950,
+              "Previous Meter Reading": 65200,
+              "Total Water Consumption": 3750,
+              "Water Usage Charge_CalcTotal": 8.25,
+              "Technology Fee_CalcTotal": 5.00,
+              "Capacity Charge Maximum Demand_CalcTotal": 25.00,
+              "Reactive Power Charge": null,
+              "Total Current Charges": 46.50
             }
         </ideal_output>
     </example>
