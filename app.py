@@ -233,21 +233,22 @@ def render_field_controls(i: int):
 
 def preview_api_call(uploaded_files, prompt, include_calculations):
     """Generate a preview of the API call that would be sent"""
-    message_content = []
+    # Show preview for first file only since files are processed individually
+    if not uploaded_files:
+        return "Upload files to see API call preview"
     
-    # Add each PDF document placeholder (showing exact structure)
-    for pdf in uploaded_files:
-        message_content.append({
+    pdf_file = uploaded_files[0]
+    
+    # Prepare message content for single PDF
+    message_content = [
+        {
             "type": "document",
             "source": {
                 "type": "base64",
                 "media_type": "application/pdf",
-                "data": f"[Base64 encoded content of {pdf.name}]"  # Placeholder
+                "data": f"[Base64 encoded content of {pdf_file.name}]"  # Placeholder
             }
-        })
-
-    # Add the examples and prompt - exactly as in the real call
-    message_content.extend([
+        },
         {
             "type": "text",
             "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
@@ -256,12 +257,12 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
             "type": "text",
             "text": prompt
         }
-    ])
+    ]
 
-    # Construct the full API call preview - matching exactly the real call
+    # Construct the full API call preview
     api_call_preview = {
         "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": 8192,  # Fixed token limit
+        "max_tokens": 8192,
         "temperature": 0,
         "system": "You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
         "messages": [
@@ -269,13 +270,14 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
                 "role": "user",
                 "content": message_content
             }
-        ],
-        "default_headers": {  # Include the custom headers
-            "anthropic-beta": "pdfs-2024-09-25"
-        }
+        ]
     }
     
-    return api_call_preview
+    return {
+        "note": "Preview for first file only. Each file is processed individually.",
+        "file_being_previewed": pdf_file.name,
+        "api_call": api_call_preview
+    }
 
 
 # Modify the count_tokens function to accept client as a parameter
