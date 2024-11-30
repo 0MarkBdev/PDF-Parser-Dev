@@ -529,7 +529,15 @@ def main():
             st.rerun()
 
         # Add checkbox here
-        include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
+        
+        col3, col4 = st.columns([1, 2])
+        with col3:
+            specify_meter = st.checkbox("Specify Meter/Account", value=False)
+        with col4:
+            meter_number = st.text_input("", label_visibility="collapsed", disabled=not specify_meter)
 
         st.write("Enter the fields you want to extract:")
 
@@ -602,7 +610,7 @@ def main():
 4. Handle any tiered charges appropriately.
 5. Compile the final JSON output.
 
-Required Fields:
+Required Fields:{f" to be extracted only for {meter_number}" if specify_meter and meter_number else ""}
 {json.dumps(field_dict, indent=2)}
 
 Special Instructions:
