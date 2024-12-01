@@ -362,10 +362,8 @@ def main():
     main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
 
     # Initialize session state for PDF splitting
-    if 'zoom_level' not in st.session_state:
-        st.session_state.zoom_level = 50
-    if 'selected_pages' not in st.session_state:
-        st.session_state.selected_pages = set()
+    if 'page_ranges' not in st.session_state:
+        st.session_state.page_ranges = [("", "")]
     if 'created_pdfs' not in st.session_state:
         st.session_state.created_pdfs = []
     if 'current_pdf' not in st.session_state:
@@ -375,7 +373,7 @@ def main():
 
     with split_tab:
         st.title("PDF Splitting")
-        st.markdown("Split your PDF documents into smaller PDFs by selecting specific pages.")
+        st.markdown("Split your PDF documents into smaller PDFs by selecting page ranges.")
 
         # File upload area
         uploaded_pdf = st.file_uploader("Upload PDF", type=['pdf'], key="pdf_splitter")
@@ -391,86 +389,82 @@ def main():
                 pdf_document = fitz.open(temp_path)
                 st.session_state.page_count = len(pdf_document)
                 st.session_state.current_pdf = uploaded_pdf.name
-                st.session_state.selected_pages = set()  # Reset selection
                 pdf_document.close()
 
             # Display total page count
             st.write(f"Total pages: {st.session_state.page_count}")
 
-            # Simplified zoom control - just a number input with spinbox
-            st.session_state.zoom_level = st.number_input(
-                "Zoom %",
-                min_value=50,
-                max_value=300,
-                value=st.session_state.zoom_level,
-                step=25
-            )
-
-            # Calculate grid columns based on zoom level
-            if st.session_state.zoom_level < 75:
-                cols_per_row = 5
-            elif st.session_state.zoom_level < 100:
-                cols_per_row = 4
-            elif st.session_state.zoom_level < 150:
-                cols_per_row = 3
-            elif st.session_state.zoom_level < 200:
-                cols_per_row = 2
-            else:
-                cols_per_row = 1
-
-            # Create grid of page previews
-            pdf_document = fitz.open(os.path.join(os.getcwd(), uploaded_pdf.name))
+            st.write("Enter page ranges to create new PDFs:")
             
-            for i in range(0, st.session_state.page_count, cols_per_row):
-                cols = st.columns(cols_per_row)
-                for j in range(cols_per_row):
-                    if i + j < st.session_state.page_count:
-                        with cols[j]:
-                            page = pdf_document[i + j]
-                            pix = page.get_pixmap(matrix=fitz.Matrix(st.session_state.zoom_level / 100, st.session_state.zoom_level / 100))
-                            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                            
-                            # Convert image to bytes
-                            img_byte_arr = io.BytesIO()
-                            img.save(img_byte_arr, format='PNG')
-                            img_byte_arr = img_byte_arr.getvalue()
-
-                            # Create container for checkbox and image
-                            container = st.container()
-                            
-                            # Add checkbox and page number
-                            page_num = i + j + 1
-                            is_selected = page_num in st.session_state.selected_pages
-                            if container.checkbox(f"Page {page_num}", value=is_selected, key=f"page_{page_num}"):
-                                st.session_state.selected_pages.add(page_num)
-                            else:
-                                st.session_state.selected_pages.discard(page_num)
-                            
-                            # Display page preview
-                            container.image(img_byte_arr, use_column_width=True)
-
-            pdf_document.close()
-
-            # Create PDF section
-            st.markdown("---")
-            st.subheader("Create New PDF")
-
-            if not st.session_state.selected_pages:
-                st.warning("No pages selected")
-            else:
-                st.write(f"Selected pages: {', '.join(map(str, sorted(st.session_state.selected_pages)))}")
+            # Display existing ranges
+            new_ranges = []
+            for i, (start, end) in enumerate(st.session_state.page_ranges):
+                col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
                 
-                if st.button("Create PDF", disabled=not st.session_state.selected_pages):
-                    # Create new PDF from selected pages
+                with col1:
+                    new_start = st.text_input("Start Page", value=start, key=f"start_{i}", 
+                                            placeholder="e.g., 1")
+                with col2:
+                    new_end = st.text_input("End Page", value=end, key=f"end_{i}", 
+                                          placeholder=f"e.g., {st.session_state.page_count}")
+                with col3:
+                    if st.button("✕", key=f"remove_range_{i}"):
+                        continue
+                with col4:
+                    if i > 0 and st.button("↑", key=f"up_{i}"):
+                        if i > 0:
+                            new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
+                
+                new_ranges.append((new_start, new_end))
+
+            # Update session state with new ranges
+            st.session_state.page_ranges = new_ranges
+
+            # Add new range button
+            if st.button("Add Page Range"):
+                st.session_state.page_ranges.append(("", ""))
+                st.rerun()
+
+            # Create PDF button
+            if st.button("Create PDF", disabled=not any(start and end for start, end in st.session_state.page_ranges)):
+                valid_ranges = []
+                error_messages = []
+
+                # Validate ranges
+                for start, end in st.session_state.page_ranges:
+                    if start and end:  # Only process filled ranges
+                        try:
+                            start_num = int(start)
+                            end_num = int(end)
+                            
+                            if start_num < 1 or end_num > st.session_state.page_count:
+                                error_messages.append(f"Range {start}-{end} is outside valid pages (1-{st.session_state.page_count})")
+                            elif start_num > end_num:
+                                error_messages.append(f"Range {start}-{end} is invalid (start > end)")
+                            else:
+                                valid_ranges.append((start_num, end_num))
+                        except ValueError:
+                            error_messages.append(f"Invalid numbers in range {start}-{end}")
+
+                if error_messages:
+                    for msg in error_messages:
+                        st.error(msg)
+                else:
+                    # Create new PDF from selected ranges
                     pdf_document = fitz.open(os.path.join(os.getcwd(), uploaded_pdf.name))
                     new_pdf = fitz.open()
                     
-                    for page_num in sorted(st.session_state.selected_pages):
-                        new_pdf.insert_pdf(pdf_document, from_page=page_num-1, to_page=page_num-1)
+                    all_pages = []
+                    for start, end in valid_ranges:
+                        all_pages.extend(range(start-1, end))
+                    
+                    for page_num in sorted(all_pages):
+                        new_pdf.insert_pdf(pdf_document, from_page=page_num, to_page=page_num)
                     
                     # Generate filename
                     base_name = os.path.splitext(uploaded_pdf.name)[0]
-                    new_filename = f"split_{','.join(map(str, sorted(st.session_state.selected_pages)))}_{base_name}.pdf"
+                    ranges_str = '_'.join(f"{start}-{end}" for start, end in valid_ranges)
+                    new_filename = f"split_{ranges_str}_{base_name}.pdf"
                     new_path = os.path.join(os.getcwd(), new_filename)
                     
                     # Save the new PDF
@@ -480,7 +474,6 @@ def main():
                     
                     # Add to created PDFs list
                     st.session_state.created_pdfs.append(new_filename)
-                    st.session_state.selected_pages = set()  # Clear selection
                     st.success(f"Created {new_filename}")
                     st.rerun()
 
