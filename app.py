@@ -499,6 +499,19 @@ def main():
                                                       value=end, 
                                                       key=f"end_range_{group_idx}_{i}", 
                                                       placeholder=f"e.g., {st.session_state.page_count}")
+                                
+                                # Check if this is the last range in the lowest group and both fields are filled
+                                if group_idx == len(st.session_state.page_ranges_groups) - 1 and \
+                                   i == len(group['ranges']) - 1 and \
+                                   new_start.strip() and new_end.strip():
+                                    # Create a new group
+                                    group_num = len(st.session_state.page_ranges_groups) + 1
+                                    st.session_state.page_ranges_groups.append({
+                                        "name": f"Group {group_num}",
+                                        "ranges": [("", "")]
+                                    })
+                                    st.rerun()
+                            
                             with col3:
                                 if st.button("✕", key=f"remove_range_btn_{group_idx}_{i}"):
                                     continue
