@@ -522,9 +522,11 @@ def main():
                         new_pdf.close()
                         pdf_document.close()
                         
-                        # Add to created PDFs list
-                        st.session_state.created_pdfs.append(new_filename)
-                        st.success(f"Created {new_filename}")
+                        if new_filename not in st.session_state.created_pdfs:
+                            st.session_state.created_pdfs.append(new_filename)
+                        else:
+                            st.error(f"A file named '{new_filename}' already exists. Please use a different group name or page ranges.")
+                            continue
                     
                     st.rerun()
 
