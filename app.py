@@ -536,7 +536,11 @@ def get_split_grid_columns(zoom_percent):
         return 1
     if zoom_percent >= 150:  # Two pages view
         return 2
-    return 3  # Default three pages view
+    if zoom_percent >= 100:  # Three pages view (default)
+        return 3
+    if zoom_percent >= 75:  # Four pages view
+        return 4
+    return 5  # Five pages view when most zoomed out
 
 def split_pdf_page():
     """Dedicated page for PDF splitting."""
