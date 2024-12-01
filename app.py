@@ -768,6 +768,39 @@ def main():
 
     # Initialize session state
     initialize_session_state()
+    
+    # Set page config to use full width
+    st.set_page_config(
+        page_title="PDF Bill Parser",
+        layout="wide",  # Use full screen width
+        initial_sidebar_state="collapsed"  # Hide sidebar by default
+    )
+
+    # Add custom CSS for full width and better styling
+    st.markdown("""
+        <style>
+        .block-container {
+            padding-top: 1rem;
+            padding-bottom: 0rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        .stButton button {
+            width: 100%;
+            border-radius: 4px;
+            padding: 0.5rem;
+        }
+        .zoom-controls .stButton button {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .page-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     # Create tabs for main content, PDF splitting, and debug info
     main_tab, split_tab, debug_tab = st.tabs(["Main", "Split PDFs", "Debug Info"])
