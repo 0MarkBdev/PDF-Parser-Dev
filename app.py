@@ -367,9 +367,6 @@ def main():
             {"name": "Group 1", "ranges": [("", "")]}
         ]
 
-    # Create tabs for main content, PDF splitting, and debug info
-    main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
-
     # Initialize session state for PDF splitting
     if 'page_ranges' not in st.session_state:
         st.session_state.page_ranges = [("", "")]
