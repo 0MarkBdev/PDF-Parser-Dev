@@ -357,8 +357,8 @@ def get_pdf_page_count(pdf_file):
     pdf_file.seek(0)
     return page_count
 
-def get_page_thumbnail(pdf_file, page_num):
-    """Generate a thumbnail for a specific page of a PDF."""
+def get_page_thumbnail(pdf_file, page_num, zoom_percent=100):
+    """Generate a high-quality thumbnail for a specific page of a PDF with adjustable zoom."""
     pdf_file.seek(0)
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
         temp_file.write(pdf_file.read())
@@ -366,7 +366,10 @@ def get_page_thumbnail(pdf_file, page_num):
     
     doc = fitz.open(temp_file_path)
     page = doc[page_num]
-    pix = page.get_pixmap(matrix=fitz.Matrix(0.2, 0.2))  # Scale down for thumbnail
+    zoom_factor = zoom_percent / 100.0
+    # Higher DPI for better quality, multiplied by zoom factor
+    matrix = fitz.Matrix(2.0 * zoom_factor, 2.0 * zoom_factor)
+    pix = page.get_pixmap(matrix=matrix)
     img_data = pix.tobytes("png")
     doc.close()
     
@@ -395,8 +398,88 @@ def initialize_session_state():
     if 'page_previews' not in st.session_state:
         st.session_state.page_previews = {}
 
+def create_modal_key(pdf_name):
+    """Create a unique key for the modal dialog."""
+    return f"modal_{pdf_name.replace(' ', '_').replace('.', '_')}"
+
+def show_pdf_preview_modal(pdf_file, page_count):
+    """Show a modal dialog with high-quality PDF preview and page selection."""
+    modal_key = create_modal_key(pdf_file.name)
+    
+    # Initialize modal state if not exists
+    if f"zoom_{modal_key}" not in st.session_state:
+        st.session_state[f"zoom_{modal_key}"] = 100
+    
+    with st.expander(f"📄 Expand {pdf_file.name}", expanded=False):
+        st.write("### PDF Preview")
+        
+        # Zoom control
+        st.slider("Zoom Level (%)", 
+                 min_value=50, 
+                 max_value=200, 
+                 value=st.session_state[f"zoom_{modal_key}"],
+                 step=10,
+                 key=f"zoom_{modal_key}")
+        
+        # Page grid with improved layout
+        cols_per_row = 2  # Show 2 pages per row for better visibility
+        for i in range(0, page_count, cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, col in enumerate(cols):
+                page_idx = i + j
+                if page_idx < page_count:
+                    with col:
+                        st.write(f"**Page {page_idx + 1}**")
+                        # Get high-quality preview with current zoom level
+                        preview = get_page_thumbnail(
+                            pdf_file, 
+                            page_idx, 
+                            st.session_state[f"zoom_{modal_key}"]
+                        )
+                        st.image(preview, use_column_width=True)
+                        # Checkbox for page selection
+                        if st.checkbox(
+                            "Select", 
+                            key=f"{pdf_file.name}_page_{page_idx}",
+                            value=f"{pdf_file.name}_page_{page_idx}" in st.session_state and 
+                                  st.session_state[f"{pdf_file.name}_page_{page_idx}"]
+                        ):
+                            if f"{pdf_file.name}_selected_pages" not in st.session_state:
+                                st.session_state[f"{pdf_file.name}_selected_pages"] = set()
+                            st.session_state[f"{pdf_file.name}_selected_pages"].add(page_idx)
+                        else:
+                            if f"{pdf_file.name}_selected_pages" in st.session_state:
+                                st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
+        
+        # Group creation interface
+        st.write("### Create Group")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            group_name = st.text_input(
+                "Group Name (optional)", 
+                key=f"group_name_{pdf_file.name}"
+            )
+        with col2:
+            if st.button("Create Group", key=f"create_group_{modal_key}"):
+                selected_pages = sorted(list(
+                    st.session_state.get(f"{pdf_file.name}_selected_pages", set())
+                ))
+                if selected_pages:
+                    if pdf_file.name not in st.session_state.pdf_groups:
+                        st.session_state.pdf_groups[pdf_file.name] = []
+                    group = {
+                        "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
+                        "pages": selected_pages
+                    }
+                    st.session_state.pdf_groups[pdf_file.name].append(group)
+                    # Clear selection after group creation
+                    st.session_state[f"{pdf_file.name}_selected_pages"] = set()
+                    st.rerun()
+                else:
+                    st.warning("Please select at least one page to create a group.")
+
 def manage_pdf_groups(uploaded_files):
-    """Manage PDF groups in the UI."""
+    """Manage PDF groups in the UI with improved preview and modal dialogs."""
     groups_changed = False
     
     for pdf_file in uploaded_files:
@@ -410,50 +493,28 @@ def manage_pdf_groups(uploaded_files):
         
         if page_count == 1:
             st.info("Single-page PDF - will be processed as one bill")
+            # Show a preview of the single page
+            preview = get_page_thumbnail(pdf_file, 0, 100)
+            st.image(preview, width=300)
             continue
         
-        # Show page thumbnails with checkboxes
-        st.write("Select pages to group together:")
-        cols = st.columns(4)
-        selected_pages = []
-        
-        for i in range(page_count):
-            with cols[i % 4]:
-                if pdf_file.name not in st.session_state.page_previews:
-                    st.session_state.page_previews[pdf_file.name] = {}
-                if i not in st.session_state.page_previews[pdf_file.name]:
-                    st.session_state.page_previews[pdf_file.name][i] = get_page_thumbnail(pdf_file, i)
-                
-                st.image(st.session_state.page_previews[pdf_file.name][i], caption=f"Page {i+1}")
-                if st.checkbox(f"Select Page {i+1}", key=f"{pdf_file.name}_page_{i}"):
-                    selected_pages.append(i)
-        
-        # Group creation
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            group_name = st.text_input("Group Name (optional)", key=f"group_name_{pdf_file.name}")
-        with col2:
-            if st.button("Create Group", key=f"create_group_{pdf_file.name}") and selected_pages:
-                group = {
-                    "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
-                    "pages": selected_pages
-                }
-                st.session_state.pdf_groups[pdf_file.name].append(group)
-                groups_changed = True
-                st.rerun()
+        # Show the preview modal
+        show_pdf_preview_modal(pdf_file, page_count)
         
         # Show existing groups
         if st.session_state.pdf_groups[pdf_file.name]:
-            st.write("Existing Groups:")
+            st.write("#### Existing Groups")
             for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
                 col1, col2 = st.columns([4, 1])
                 with col1:
-                    st.write(f"{group['name']}: Pages {[p+1 for p in group['pages']]}")
+                    st.write(f"**{group['name']}**: Pages {[p+1 for p in group['pages']]}")
                 with col2:
                     if st.button("Delete", key=f"delete_group_{pdf_file.name}_{i}"):
                         st.session_state.pdf_groups[pdf_file.name].pop(i)
                         groups_changed = True
                         st.rerun()
+        
+        st.markdown("---")  # Visual separator between PDFs
     
     return groups_changed
 
