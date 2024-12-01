@@ -532,47 +532,41 @@ def show_fullscreen_preview(pdf_file, page_count):
 
 def split_pdf_page():
     """Dedicated page for PDF splitting."""
-    # Custom CSS to force full width
-    st.markdown("""
-        <style>
-        /* Override Streamlit's default width restrictions */
-        .appview-container .main .block-container {
-            max-width: unset !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            width: 100% !important;
-        }
-
-        /* Remove padding in containers */
-        [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
-            padding-left: 0rem !important;
-            padding-right: 0rem !important;
-        }
-        
-        /* Ensure content spans full width */
-        .stMarkdown, .stImage, .stButton, .stNumberInput {
-            width: 100% !important;
-        }
-        
-        /* Adjust image display */
-        .stImage > img {
-            width: 100% !important;
-            max-width: none !important;
-        }
-        
-        /* Make buttons more prominent */
-        .stButton > button {
-            width: 100%;
-            border-radius: 4px;
-            padding: 0.5rem;
-        }
-
-        /* Remove any fixed width containers */
-        .css-1d391kg, .css-1a1fmpi {
-            max-width: none !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # Only apply full-width styling if we're in the Split PDFs tab
+    if st.session_state.current_tab == "Split PDFs":
+        st.markdown("""
+            <style>
+            /* Target only the Split PDFs tab */
+            [data-testid="stAppViewContainer"] > .main {
+                max-width: 100%;
+            }
+            [data-testid="stAppViewContainer"] > .main > .block-container {
+                max-width: 100%;
+                padding-left: 1rem;
+                padding-right: 1rem;
+                width: 100% !important;
+            }
+            [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+                padding-left: 0rem;
+                padding-right: 0rem;
+            }
+            /* Ensure content spans full width */
+            .element-container, .stMarkdown, .stImage, .stButton, .stNumberInput {
+                width: 100%;
+            }
+            /* Adjust image display */
+            .stImage > img {
+                width: 100%;
+                max-width: none;
+            }
+            /* Make buttons more prominent */
+            .stButton > button {
+                width: 100%;
+                border-radius: 4px;
+                padding: 0.5rem;
+            }
+            </style>
+        """, unsafe_allow_html=True)
     
     st.markdown("## PDF Splitting")
     st.write("Create smaller PDFs from larger documents before processing.")
@@ -812,10 +806,15 @@ def main():
     # Initialize session state
     initialize_session_state()
 
-    # Create tabs for main content, PDF splitting, and debug info
-    main_tab, split_tab, debug_tab = st.tabs(["Main", "Split PDFs", "Debug Info"])
+    # Track current tab in session state
+    if 'current_tab' not in st.session_state:
+        st.session_state.current_tab = "Main"
 
-    with main_tab:
+    # Create tabs for main content, PDF splitting, and debug info
+    tab1, tab2, tab3 = st.tabs(["Main", "Split PDFs", "Debug Info"])
+
+    with tab1:
+        st.session_state.current_tab = "Main"
         # Create the interface
         st.title('Bill Parser')
 
@@ -963,10 +962,12 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                 except Exception as e:
                     st.error(f"Error processing files: {str(e)}")
 
-    with split_tab:
+    with tab2:
+        st.session_state.current_tab = "Split PDFs"
         split_pdf_page()
-    
-    with debug_tab:
+
+    with tab3:
+        st.session_state.current_tab = "Debug Info"
         # Create sections using expanders
         with st.expander("📤 API Call Preview", expanded=True):
             st.write("Preview the API call that will be sent when processing files")
