@@ -923,196 +923,193 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             else:
                 st.warning("Please upload files or select split PDFs to process.")
 
-        # Debug tab content
-        with debug_tab:
-            # Create sections using expanders
-            with st.expander("📤 API Call Preview", expanded=True):
-                st.write("Preview the API call that will be sent when processing files")
+        # Move Excel creation and download button logic here, at the end of main_tab
+        if hasattr(st.session_state, 'results_df'):
+            # Get the original field order from session state
+            original_fields = [field for field, _ in st.session_state.fields if field]
+            
+            # Group and sort columns by base names while preserving original field order
+            def get_base_name(col):
+                # Skip filename column
+                if col == 'filename':
+                    return '000_filename'  # Changed to ensure filename is always first
+                # Split on underscore and get base name
+                parts = col.split('_')
+                base = '_'.join(parts[:-1]) if len(parts) > 1 else col
+                # Get the original position of the base field
+                try:
+                    original_pos = original_fields.index(base)
+                except ValueError:
+                    # If base not in original fields, put it at the end
+                    original_pos = len(original_fields)
+                return f"{original_pos + 1:03d}_{base}"  # Added +1 to make room for filename
+
+            def get_suffix_priority(col):
+                # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
+                if col == 'filename':
+                    return -1  # Ensure filename stays first
+                if '_' not in col:
+                    return 0
+                suffix = col.split('_')[-1]
+                priorities = {
+                    '2': 1,
+                    '3': 2,
+                    '4': 3,
+                    'Total': 98,
+                    'CalcTotal': 99
+                }
+                return priorities.get(suffix, 50)  # Default priority for unknown suffixes
+
+            # Sort columns first by original field order (via base name), then by suffix priority
+            columns = st.session_state.results_df.columns.tolist()
+            sorted_columns = sorted(
+                columns,
+                key=lambda x: (get_base_name(x), get_suffix_priority(x))
+            )
+
+            # Reorder the DataFrame columns
+            df_sorted = st.session_state.results_df[sorted_columns]
+            
+            # Create Excel file with sorted columns
+            excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
+            df_sorted.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
+
+            # Auto-adjust column widths more safely
+            worksheet = excel_buffer.sheets['Extracted Data']
+            for idx, col in enumerate(df_sorted.columns):
+                # Get max length of column data and column header
+                max_length = max(
+                    df_sorted[col].astype(str).apply(len).max(),
+                    len(str(col))
+                )
+                # Limit column width to a reasonable maximum (e.g., 50 characters)
+                adjusted_width = min(max_length + 2, 50)
+                # Convert numeric index to Excel column letter
+                col_letter = chr(65 + (idx % 26))
+                if idx >= 26:
+                    col_letter = chr(64 + (idx // 26)) + col_letter
+                worksheet.column_dimensions[col_letter].width = adjusted_width
+
+            excel_buffer.close()
+
+            # Add download button
+            with open('results.xlsx', 'rb') as f:
+                st.download_button(
+                    'Download Results',
+                    f,
+                    'results.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+
+            # Display the results in the app with sorted columns
+            st.write("### Extracted Data")
+            st.dataframe(df_sorted)
+
+    with debug_tab:
+        # Create sections using expanders
+        with st.expander("📤 API Call Preview", expanded=True):
+            st.write("Preview the API call that will be sent when processing files")
+            
+            if uploaded_files:
+                col1, col2 = st.columns([1, 1])
                 
-                if uploaded_files:
-                    col1, col2 = st.columns([1, 1])
-                    
-                    # Create buttons side by side but keep display area unified
-                    preview_clicked = col1.button("Generate API Call Preview")
-                    count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
-                    
-                    if preview_clicked or count_tokens_clicked:
-                        # If token counting was requested, show it first
-                        if count_tokens_clicked:
-                            try:
-                                token_count = count_tokens(client, prompt, include_calculations)
-                                st.success("Token Count Results:")
-                                # Print the full response for debugging
-                                print("Token count response:", token_count)
-                                st.json(token_count)  # Show the full response
-                                st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
-                            except Exception as e:
-                                st.error(f"Error counting tokens: {str(e)}")
-                                st.error("Please check the API documentation or try again later.")
+                # Create buttons side by side but keep display area unified
+                preview_clicked = col1.button("Generate API Call Preview")
+                count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
+                
+                if preview_clicked or count_tokens_clicked:
+                    # If token counting was requested, show it first
+                    if count_tokens_clicked:
+                        try:
+                            token_count = count_tokens(client, prompt, include_calculations)
+                            st.success("Token Count Results:")
+                            # Print the full response for debugging
+                            print("Token count response:", token_count)
+                            st.json(token_count)  # Show the full response
+                            st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                        except Exception as e:
+                            st.error(f"Error counting tokens: {str(e)}")
+                            st.error("Please check the API documentation or try again later.")
                             
-                            # Add a visual separator
-                            st.markdown("---")
-                        
-                        # Show the API preview (same for both buttons)
-                        preview = preview_api_call(uploaded_files, prompt, include_calculations)
-                        st.session_state.api_preview = preview
-                        st.json(preview)
-                else:
-                    st.info("Upload files in the main tab to preview the API call")
-            
-            with st.expander("📊 Last API Call Statistics", expanded=False):
-                if hasattr(st.session_state, 'last_usage'):
-                    st.write("Last API Call Statistics:")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
-                    with col2:
-                        st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
-                    
-                    # Add stop reason explanation
-                    stop_reason = st.session_state.last_usage['stop_reason']
-                    explanation = {
-                        "end_turn": "The model completed its response naturally.",
-                        "max_tokens": "The response was cut off due to reaching the token limit.",
-                        "stop_sequence": "The model stopped at a designated stop sequence.",
-                        "error": "The response was terminated due to an error."
-                    }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
-                    
-                    st.write("**Stop Reason:**")
-                    st.info(explanation)
-                else:
-                    st.write("No API calls made yet.")
-            
-            with st.expander("📝 Raw JSON Response", expanded=False):
-                if hasattr(st.session_state, 'raw_json_response'):
-                    st.write("Raw JSON Response from last API call:")
-                    st.code(st.session_state.raw_json_response, language='json')
-                else:
-                    st.write("No API response data available yet.")
-
-            with st.expander("📋 API Call Logs", expanded=True):
-                if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
-                    for log in st.session_state.api_logs:
-                        st.markdown(f"### File: {log['file_processed']}")
-                        st.markdown("**Timestamp:**")
-                        st.write(log['timestamp'])
-                        
-                        if log['error']:
-                            st.error(f"**Error:** {log['error']}")
-                        else:
-                            st.markdown("**Number of Bills Returned:**")
-                            st.write(log['response']['num_bills_returned'])
-                            st.markdown("**Fields Returned:**")
-                            st.write(log['response']['fields_returned'])
-                            
-                            # Use tabs instead of nested expanders
-                            raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
-                            
-                            with raw_tab:
-                                st.json(log['response']['raw_response'])
-                            
-                            with parsed_tab:
-                                st.json(log['response']['parsed_response'])
-                            
-                        # Add a visual separator between files
+                        # Add a visual separator
                         st.markdown("---")
-                else:
-                    st.info("No API calls logged yet.")
-
-            with st.expander("⚠️ Problematic Files", expanded=True):
-                if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
-                    for file_log in st.session_state.problematic_files:
-                        st.markdown(f"### File: {file_log['filename']}")
-                        st.markdown("**Response data:**")
-                        st.json(file_log['response'])
-                        st.markdown("---")
-                else:
-                    st.info("No problematic files detected in the last processing run.")
-
-    # Move Excel creation and download button outside the Process Bills button block
-    if hasattr(st.session_state, 'results_df'):
-        # Get the original field order from session state
-        original_fields = [field for field, _ in st.session_state.fields if field]
+                    
+                    # Show the API preview (same for both buttons)
+                    preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                    st.session_state.api_preview = preview
+                    st.json(preview)
+            else:
+                st.info("Upload files in the main tab to preview the API call")
         
-        # Group and sort columns by base names while preserving original field order
-        def get_base_name(col):
-            # Skip filename column
-            if col == 'filename':
-                return '000_filename'  # Changed to ensure filename is always first
-            # Split on underscore and get base name
-            parts = col.split('_')
-            base = '_'.join(parts[:-1]) if len(parts) > 1 else col
-            # Get the original position of the base field
-            try:
-                original_pos = original_fields.index(base)
-            except ValueError:
-                # If base not in original fields, put it at the end
-                original_pos = len(original_fields)
-            return f"{original_pos + 1:03d}_{base}"  # Added +1 to make room for filename
-
-        def get_suffix_priority(col):
-            # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
-            if col == 'filename':
-                return -1  # Ensure filename stays first
-            if '_' not in col:
-                return 0
-            suffix = col.split('_')[-1]
-            priorities = {
-                '2': 1,
-                '3': 2,
-                '4': 3,
-                'Total': 98,
-                'CalcTotal': 99
-            }
-            return priorities.get(suffix, 50)  # Default priority for unknown suffixes
-
-        # Sort columns first by original field order (via base name), then by suffix priority
-        columns = st.session_state.results_df.columns.tolist()
-        sorted_columns = sorted(
-            columns,
-            key=lambda x: (get_base_name(x), get_suffix_priority(x))
-        )
-
-        # Reorder the DataFrame columns
-        df_sorted = st.session_state.results_df[sorted_columns]
+        with st.expander("📊 Last API Call Statistics", expanded=False):
+            if hasattr(st.session_state, 'last_usage'):
+                st.write("Last API Call Statistics:")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
+                with col2:
+                    st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
+                
+                # Add stop reason explanation
+                stop_reason = st.session_state.last_usage['stop_reason']
+                explanation = {
+                    "end_turn": "The model completed its response naturally.",
+                    "max_tokens": "The response was cut off due to reaching the token limit.",
+                    "stop_sequence": "The model stopped at a designated stop sequence.",
+                    "error": "The response was terminated due to an error."
+                }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
+                
+                st.write("**Stop Reason:**")
+                st.info(explanation)
+            else:
+                st.write("No API calls made yet.")
         
-        # Create Excel file with sorted columns
-        excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
-        df_sorted.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
+        with st.expander("📝 Raw JSON Response", expanded=False):
+            if hasattr(st.session_state, 'raw_json_response'):
+                st.write("Raw JSON Response from last API call:")
+                st.code(st.session_state.raw_json_response, language='json')
+            else:
+                st.write("No API response data available yet.")
 
-        # Auto-adjust column widths more safely
-        worksheet = excel_buffer.sheets['Extracted Data']
-        for idx, col in enumerate(df_sorted.columns):
-            # Get max length of column data and column header
-            max_length = max(
-                df_sorted[col].astype(str).apply(len).max(),
-                len(str(col))
-            )
-            # Limit column width to a reasonable maximum (e.g., 50 characters)
-            adjusted_width = min(max_length + 2, 50)
-            # Convert numeric index to Excel column letter
-            col_letter = chr(65 + (idx % 26))
-            if idx >= 26:
-                col_letter = chr(64 + (idx // 26)) + col_letter
-            worksheet.column_dimensions[col_letter].width = adjusted_width
+        with st.expander("📋 API Call Logs", expanded=True):
+            if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
+                for log in st.session_state.api_logs:
+                    st.markdown(f"### File: {log['file_processed']}")
+                    st.markdown("**Timestamp:**")
+                    st.write(log['timestamp'])
+                    
+                    if log['error']:
+                        st.error(f"**Error:** {log['error']}")
+                    else:
+                        st.markdown("**Number of Bills Returned:**")
+                        st.write(log['response']['num_bills_returned'])
+                        st.markdown("**Fields Returned:**")
+                        st.write(log['response']['fields_returned'])
+                        
+                        # Use tabs instead of nested expanders
+                        raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
+                        
+                        with raw_tab:
+                            st.json(log['response']['raw_response'])
+                        
+                        with parsed_tab:
+                            st.json(log['response']['parsed_response'])
+                        
+                    # Add a visual separator between files
+                    st.markdown("---")
+            else:
+                st.info("No API calls logged yet.")
 
-        excel_buffer.close()
+        with st.expander("⚠️ Problematic Files", expanded=True):
+            if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
+                for file_log in st.session_state.problematic_files:
+                    st.markdown(f"### File: {file_log['filename']}")
+                    st.markdown("**Response data:**")
+                    st.json(file_log['response'])
+                    st.markdown("---")
+            else:
+                st.info("No problematic files detected in the last processing run.")
 
-        # Add download button
-        with open('results.xlsx', 'rb') as f:
-            st.download_button(
-                'Download Results',
-                f,
-                'results.xlsx',
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-
-        # Display the results in the app with sorted columns
-        st.write("### Extracted Data")
-        st.dataframe(df_sorted)
-
-
-# Run the app with password protection
 # Run the app with password protection
 if check_password():
     main()
