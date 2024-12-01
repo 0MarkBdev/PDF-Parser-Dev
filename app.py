@@ -455,7 +455,7 @@ def main():
 4. Handle any tiered charges appropriately.
 5. Compile the final JSON output.
 
-Required Fields:{f" to be extracted only for {meter_number}" if specify_meter and meter_number else ""}
+Required Fields{f" to be extracted only for {meter_number}" if specify_meter and meter_number else ""}:
 {json.dumps(field_dict, indent=2)}
 
 Special Instructions:
