@@ -408,24 +408,6 @@ def get_grid_columns(zoom_percent):
 
 def show_fullscreen_preview(pdf_file, page_count):
     """Show fullscreen preview with page selection and grouping."""
-    # Hide the main page's default elements
-    st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
-    
-    # Custom CSS to make it truly fullscreen
-    st.markdown("""
-        <style>
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 0rem;
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-        section[data-testid="stSidebar"] {
-            width: 0px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
     # Header with back button
     col1, col2 = st.columns([1, 11])
     with col1:
@@ -484,18 +466,6 @@ def show_fullscreen_preview(pdf_file, page_count):
                         st.image(preview, use_column_width=True)
     
     # Fixed bottom bar for group creation
-    st.markdown("""
-        <style>
-        .stButton button {
-            height: 40px;
-        }
-        div[data-testid="stHorizontalBlock"] > div {
-            display: flex;
-            align-items: center;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
     with st.container():
         st.markdown("---")
         col1, col2, col3 = st.columns([3, 2, 1])
@@ -700,15 +670,41 @@ def initialize_session_state():
 
 # Main app
 def main():
+    # Set page config at the very start
+    st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
+    
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
     # Initialize session state
     initialize_session_state()
-
+    
+    # Custom CSS for fullscreen mode when viewing PDFs
+    if st.session_state.current_pdf:
+        st.markdown("""
+            <style>
+            .block-container {
+                padding-top: 1rem;
+                padding-bottom: 0rem;
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            section[data-testid="stSidebar"] {
+                width: 0px;
+            }
+            .stButton button {
+                height: 40px;
+            }
+            div[data-testid="stHorizontalBlock"] > div {
+                display: flex;
+                align-items: center;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+    
     # Create tabs for main content and debug info
     main_tab, debug_tab = st.tabs(["Main", "Debug Info"])
-
+    
     with main_tab:
         # Create the interface
         st.title('Bill Parser')
