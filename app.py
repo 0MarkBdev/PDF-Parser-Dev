@@ -6,18 +6,9 @@ import json
 from typing import Any
 import math
 from datetime import datetime
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    st.error("Error: PyMuPDF (fitz) is not installed. Please make sure it's listed in requirements.txt and the app is redeployed.")
-    fitz = None
-try:
-    from PIL import Image
-except ImportError:
-    st.error("Error: Pillow is not installed. Please make sure it's listed in requirements.txt and the app is redeployed.")
-    Image = None
+import fitz  # PyMuPDF
+from PIL import Image
 import io
-import tempfile
 import os
 
 TEMPLATES = {
@@ -358,213 +349,172 @@ def log_api_call(file: Any, response: Any, error: str = None) -> dict:
         "error": error
     }
 
-def create_pdf_from_pages(input_pdf_path, page_numbers, output_path):
-    """Create a new PDF from selected pages of the input PDF"""
-    doc = fitz.open(input_pdf_path)
-    new_doc = fitz.open()
-    
-    for page_num in page_numbers:
-        new_doc.insert_pdf(doc, from_page=page_num-1, to_page=page_num-1)
-    
-    new_doc.save(output_path)
-    new_doc.close()
-    doc.close()
-
-def get_pdf_preview(pdf_path, page_num, zoom=1.0):
-    """Get a preview image of a PDF page"""
-    doc = fitz.open(pdf_path)
-    page = doc[page_num-1]
-    
-    # Get the page's dimensions
-    rect = page.rect
-    
-    # Calculate zoom matrix
-    mat = fitz.Matrix(zoom * 2, zoom * 2)  # Multiply by 2 for better resolution
-    pix = page.get_pixmap(matrix=mat)
-    
-    # Convert to PIL Image
-    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    
-    # Convert to bytes for Streamlit
-    img_byte_arr = io.BytesIO()
-    img.save(img_byte_arr, format='PNG')
-    img_byte_arr = img_byte_arr.getvalue()
-    
-    doc.close()
-    return img_byte_arr
-
-def pdf_splitting_page():
-    """Render the PDF splitting page"""
-    st.title("PDF Splitting")
-    st.subheader("Split PDFs by selecting specific pages")
-    
-    # Check if required dependencies are available
-    if fitz is None or Image is None:
-        st.error("Required dependencies (PyMuPDF or Pillow) are not available. Please check the app logs and make sure all dependencies are properly installed.")
-        return
-    
-    # Initialize session state for storing created PDFs
-    if 'created_pdfs' not in st.session_state:
-        st.session_state.created_pdfs = []
-    if 'current_pdf' not in st.session_state:
-        st.session_state.current_pdf = None
-    if 'zoom_level' not in st.session_state:
-        st.session_state.zoom_level = 100
-    if 'selected_pages' not in st.session_state:
-        st.session_state.selected_pages = set()
-    
-    # File upload area
-    uploaded_file = st.file_uploader("Upload PDF", type=['pdf'], key="pdf_splitter")
-    
-    if uploaded_file:
-        try:
-            # Save the uploaded file to a temporary location
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                tmp_file.write(uploaded_file.getvalue())
-                temp_path = tmp_file.name
-            
-            # Store the current PDF info
-            if st.session_state.current_pdf != temp_path:
-                st.session_state.current_pdf = temp_path
-                st.session_state.selected_pages = set()
-            
-            # Open the PDF and get total pages
-            doc = fitz.open(temp_path)
-            total_pages = len(doc)
-            st.write(f"Total pages: {total_pages}")
-            
-            # Zoom controls
-            st.write("Zoom Control")
-            zoom_col1, zoom_col2, zoom_col3, zoom_col4 = st.columns([1, 6, 2, 1])
-            
-            with zoom_col1:
-                if st.button("-"):
-                    st.session_state.zoom_level = max(50, st.session_state.zoom_level - 25)
-            
-            with zoom_col2:
-                st.session_state.zoom_level = st.slider("", 50, 300, st.session_state.zoom_level, 25)
-            
-            with zoom_col3:
-                st.session_state.zoom_level = int(st.text_input("", value=st.session_state.zoom_level, key="zoom_input"))
-            
-            with zoom_col4:
-                if st.button("+"):
-                    st.session_state.zoom_level = min(300, st.session_state.zoom_level + 25)
-            
-            # Calculate columns based on zoom level
-            zoom = st.session_state.zoom_level / 100
-            if zoom <= 0.74:
-                cols_per_row = 5
-            elif zoom <= 0.99:
-                cols_per_row = 4
-            elif zoom <= 1.49:
-                cols_per_row = 3
-            elif zoom <= 1.99:
-                cols_per_row = 2
-            else:
-                cols_per_row = 1
-            
-            # Create grid of previews
-            for i in range(0, total_pages, cols_per_row):
-                cols = st.columns(cols_per_row)
-                for j in range(cols_per_row):
-                    if i + j < total_pages:
-                        page_num = i + j + 1
-                        with cols[j]:
-                            # Page preview
-                            preview = get_pdf_preview(temp_path, page_num, zoom)
-                            st.image(preview, use_column_width=True)
-                            
-                            # Checkbox and page number
-                            col1, col2 = st.columns([1, 3])
-                            with col1:
-                                if st.checkbox("", key=f"page_{page_num}", 
-                                             value=page_num in st.session_state.selected_pages):
-                                    st.session_state.selected_pages.add(page_num)
-                                else:
-                                    st.session_state.selected_pages.discard(page_num)
-                            with col2:
-                                st.write(f"Page {page_num}")
-            
-            # Create PDF section
-            st.write("---")
-            st.write("### Create New PDF")
-            
-            if not st.session_state.selected_pages:
-                st.warning("No pages selected")
-            else:
-                st.write(f"Selected pages: {sorted(list(st.session_state.selected_pages))}")
-                
-                if st.button("Create PDF", disabled=len(st.session_state.selected_pages) == 0):
-                    # Generate filename
-                    selected_pages_str = ','.join(map(str, sorted(st.session_state.selected_pages)))
-                    new_filename = f"split_{selected_pages_str}_{uploaded_file.name}"
-                    output_path = os.path.join(tempfile.gettempdir(), new_filename)
-                    
-                    # Create the PDF
-                    create_pdf_from_pages(temp_path, sorted(list(st.session_state.selected_pages)), output_path)
-                    
-                    # Add to created PDFs list
-                    st.session_state.created_pdfs.append({
-                        'path': output_path,
-                        'filename': new_filename
-                    })
-                    
-                    # Clear selection
-                    st.session_state.selected_pages = set()
-                    st.rerun()
-            
-            # List of created PDFs
-            if st.session_state.created_pdfs:
-                st.write("---")
-                st.write("### Created PDFs")
-                
-                for pdf in st.session_state.created_pdfs:
-                    col1, col2, col3, col4 = st.columns([1, 6, 2, 2])
-                    
-                    with col1:
-                        st.write("📄")
-                    with col2:
-                        st.write(pdf['filename'])
-                    with col3:
-                        if st.button("Delete", key=f"del_{pdf['filename']}"):
-                            try:
-                                os.remove(pdf['path'])
-                                st.session_state.created_pdfs.remove(pdf)
-                                st.rerun()
-                            except:
-                                st.error("Failed to delete file")
-                    with col4:
-                        if st.button("Send to Parser", key=f"parse_{pdf['filename']}"):
-                            if 'uploaded_files' not in st.session_state:
-                                st.session_state.uploaded_files = []
-                            
-                            # Add the file to the main parser's uploaded files
-                            with open(pdf['path'], 'rb') as f:
-                                file_bytes = f.read()
-                                st.session_state.uploaded_files.append({
-                                    'name': pdf['filename'],
-                                    'type': 'application/pdf',
-                                    'bytes': file_bytes
-                                })
-                            st.success(f"Added {pdf['filename']} to parser queue")
-            
-            # Cleanup temporary file
-            doc.close()
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-        except Exception as e:
-            st.error(f"Error processing {uploaded_file.name}: {str(e)}")
-
 # Main app
 def main():
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
+    # Initialize session state for split PDFs
+    if 'split_pdfs_to_parse' not in st.session_state:
+        st.session_state.split_pdfs_to_parse = []
+
     # Create tabs for main content, PDF splitting, and debug info
     main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
+
+    # Initialize session state for PDF splitting
+    if 'zoom_level' not in st.session_state:
+        st.session_state.zoom_level = 100
+    if 'selected_pages' not in st.session_state:
+        st.session_state.selected_pages = set()
+    if 'created_pdfs' not in st.session_state:
+        st.session_state.created_pdfs = []
+    if 'current_pdf' not in st.session_state:
+        st.session_state.current_pdf = None
+    if 'page_count' not in st.session_state:
+        st.session_state.page_count = 0
+
+    with split_tab:
+        st.title("PDF Splitting")
+        st.markdown("Split your PDF documents into smaller PDFs by selecting specific pages.")
+
+        # File upload area
+        uploaded_pdf = st.file_uploader("Upload PDF", type=['pdf'], key="pdf_splitter")
+
+        if uploaded_pdf:
+            # Save the uploaded PDF temporarily
+            if st.session_state.current_pdf != uploaded_pdf.name:
+                temp_path = os.path.join(os.getcwd(), uploaded_pdf.name)
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_pdf.getvalue())
+                
+                # Open PDF and get page count
+                pdf_document = fitz.open(temp_path)
+                st.session_state.page_count = len(pdf_document)
+                st.session_state.current_pdf = uploaded_pdf.name
+                st.session_state.selected_pages = set()  # Reset selection
+                pdf_document.close()
+
+            # Display total page count
+            st.write(f"Total pages: {st.session_state.page_count}")
+
+            # Zoom controls
+            col1, col2, col3, col4 = st.columns([1, 6, 2, 1])
+            with col1:
+                if st.button("-"):
+                    st.session_state.zoom_level = max(50, st.session_state.zoom_level - 25)
+            with col2:
+                st.session_state.zoom_level = st.slider("Zoom", 50, 300, st.session_state.zoom_level, 25)
+            with col3:
+                st.session_state.zoom_level = st.number_input("", min_value=50, max_value=300, value=st.session_state.zoom_level, label_visibility="collapsed")
+            with col4:
+                if st.button("+"):
+                    st.session_state.zoom_level = min(300, st.session_state.zoom_level + 25)
+
+            # Calculate grid columns based on zoom level
+            if st.session_state.zoom_level < 75:
+                cols_per_row = 5
+            elif st.session_state.zoom_level < 100:
+                cols_per_row = 4
+            elif st.session_state.zoom_level < 150:
+                cols_per_row = 3
+            elif st.session_state.zoom_level < 200:
+                cols_per_row = 2
+            else:
+                cols_per_row = 1
+
+            # Create grid of page previews
+            pdf_document = fitz.open(os.path.join(os.getcwd(), uploaded_pdf.name))
+            
+            for i in range(0, st.session_state.page_count, cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j in range(cols_per_row):
+                    if i + j < st.session_state.page_count:
+                        with cols[j]:
+                            page = pdf_document[i + j]
+                            pix = page.get_pixmap(matrix=fitz.Matrix(st.session_state.zoom_level / 100, st.session_state.zoom_level / 100))
+                            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                            
+                            # Convert image to bytes
+                            img_byte_arr = io.BytesIO()
+                            img.save(img_byte_arr, format='PNG')
+                            img_byte_arr = img_byte_arr.getvalue()
+
+                            # Create container for checkbox and image
+                            container = st.container()
+                            
+                            # Add checkbox and page number
+                            page_num = i + j + 1
+                            is_selected = page_num in st.session_state.selected_pages
+                            if container.checkbox(f"Page {page_num}", value=is_selected, key=f"page_{page_num}"):
+                                st.session_state.selected_pages.add(page_num)
+                            else:
+                                st.session_state.selected_pages.discard(page_num)
+                            
+                            # Display page preview
+                            container.image(img_byte_arr, use_column_width=True)
+
+            pdf_document.close()
+
+            # Create PDF section
+            st.markdown("---")
+            st.subheader("Create New PDF")
+
+            if not st.session_state.selected_pages:
+                st.warning("No pages selected")
+            else:
+                st.write(f"Selected pages: {', '.join(map(str, sorted(st.session_state.selected_pages)))}")
+                
+                if st.button("Create PDF", disabled=not st.session_state.selected_pages):
+                    # Create new PDF from selected pages
+                    pdf_document = fitz.open(os.path.join(os.getcwd(), uploaded_pdf.name))
+                    new_pdf = fitz.open()
+                    
+                    for page_num in sorted(st.session_state.selected_pages):
+                        new_pdf.insert_pdf(pdf_document, from_page=page_num-1, to_page=page_num-1)
+                    
+                    # Generate filename
+                    base_name = os.path.splitext(uploaded_pdf.name)[0]
+                    new_filename = f"split_{','.join(map(str, sorted(st.session_state.selected_pages)))}_{base_name}.pdf"
+                    new_path = os.path.join(os.getcwd(), new_filename)
+                    
+                    # Save the new PDF
+                    new_pdf.save(new_path)
+                    new_pdf.close()
+                    pdf_document.close()
+                    
+                    # Add to created PDFs list
+                    st.session_state.created_pdfs.append(new_filename)
+                    st.session_state.selected_pages = set()  # Clear selection
+                    st.success(f"Created {new_filename}")
+                    st.rerun()
+
+            # Display created PDFs
+            if st.session_state.created_pdfs:
+                st.markdown("---")
+                st.subheader("Created PDFs")
+                
+                for pdf_name in st.session_state.created_pdfs:
+                    col1, col2, col3 = st.columns([6, 2, 2])
+                    with col1:
+                        st.write(pdf_name)
+                    with col2:
+                        if st.button("Delete", key=f"del_{pdf_name}"):
+                            try:
+                                os.remove(os.path.join(os.getcwd(), pdf_name))
+                                st.session_state.created_pdfs.remove(pdf_name)
+                                # Also remove from split_pdfs_to_parse if present
+                                if pdf_name in st.session_state.split_pdfs_to_parse:
+                                    st.session_state.split_pdfs_to_parse.remove(pdf_name)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error deleting file: {str(e)}")
+                    with col3:
+                        if pdf_name in st.session_state.split_pdfs_to_parse:
+                            st.write("✓ Sent to parser")
+                        else:
+                            if st.button("Send to Parser", key=f"parse_{pdf_name}"):
+                                st.session_state.split_pdfs_to_parse.append(pdf_name)
+                                st.rerun()
 
     with main_tab:
         # Create the interface
@@ -689,12 +639,34 @@ Remember to replace the null values with the actual extracted data or keep as nu
 
 Provide ONLY the JSON object as your final output, with no additional text."""
 
-        # Add file uploader
+        # Modify file uploader section to include split PDFs
         uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
+        
+        # Add split PDFs to the processing list if any exist
+        all_files_to_process = []
+        if uploaded_files:
+            all_files_to_process.extend(uploaded_files)
+            
+        # Add split PDFs that were sent to parser
+        split_files_to_process = []
+        for split_pdf in st.session_state.split_pdfs_to_parse:
+            try:
+                with open(os.path.join(os.getcwd(), split_pdf), "rb") as f:
+                    split_files_to_process.append(("split_pdf", split_pdf, f.read()))
+            except Exception as e:
+                st.error(f"Error loading split PDF {split_pdf}: {str(e)}")
+                st.session_state.split_pdfs_to_parse.remove(split_pdf)
+                continue
+
+        # Show split PDFs that will be processed
+        if split_files_to_process:
+            st.write("Split PDFs to be processed:")
+            for _, name, _ in split_files_to_process:
+                st.write(f"- {name}")
 
         # Process Bills button logic
         if st.button('Process Bills'):
-            if uploaded_files:
+            if all_files_to_process or split_files_to_process:
                 status_container = st.empty()
                 status_container.info("Processing files one at a time...")
 
@@ -705,13 +677,17 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         default_headers={"anthropic-beta": "pdfs-2024-09-25"}
                     )
 
-                    # Change variable name from processed_results to be clearer about individual processing
-                    individual_results = []  # Changed from processed_results for clarity
+                    individual_results = []
                     st.session_state.api_logs = []
 
-                    # Process each PDF individually
-                    for file_index, pdf_file in enumerate(uploaded_files):
-                        status_container.info(f"Processing file {file_index + 1} of {len(uploaded_files)}: {pdf_file.name}")
+                    # Process uploaded files
+                    total_files = len(all_files_to_process) + len(split_files_to_process)
+                    current_file = 0
+
+                    # Process regular uploaded files
+                    for pdf_file in all_files_to_process:
+                        current_file += 1
+                        status_container.info(f"Processing file {current_file} of {total_files}: {pdf_file.name}")
                         
                         # Prepare message content for this PDF
                         message_content = [
@@ -800,19 +776,98 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                             st.error(f"Error processing {pdf_file.name}: {str(e)}")
                             continue
 
-                    # Create DataFrame from individual results
+                    # Process split PDFs
+                    for file_type, file_name, file_content in split_files_to_process:
+                        current_file += 1
+                        status_container.info(f"Processing file {current_file} of {total_files}: {file_name}")
+                        
+                        # Create a temporary BytesIO object to simulate a file upload
+                        temp_file = io.BytesIO(file_content)
+                        temp_file.name = file_name
+
+                        # Process the split PDF using the same logic as regular files
+                        message_content = [
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": base64.b64encode(file_content).decode()
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+
+                        try:
+                            # Send to Claude API
+                            message = pdf_client.messages.create(
+                                model="claude-3-5-sonnet-20241022",
+                                max_tokens=8192,
+                                temperature=0,
+                                system="You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
+                                messages=[
+                                    {
+                                        "role": "user",
+                                        "content": message_content
+                                    }
+                                ]
+                            )
+
+                            # Parse response
+                            try:
+                                response_data = json.loads(message.content[0].text)
+                                if isinstance(response_data, dict):
+                                    response_data['filename'] = file_name
+                                    individual_results.append(response_data)
+                                elif response_data.get('bills') and len(response_data['bills']) > 0:
+                                    bill_dict = dict(zip(response_data['fields'], response_data['bills'][0]))
+                                    bill_dict['filename'] = file_name
+                                    individual_results.append(bill_dict)
+
+                                # Log successful API call
+                                st.session_state.api_logs.append(
+                                    log_api_call(temp_file, {
+                                        "parsed_response": response_data,
+                                        "raw_response": message.model_dump(),
+                                        "file_processed": file_name,
+                                        "num_bills_returned": 1 if isinstance(response_data, dict) else len(response_data.get("bills", [])),
+                                        "fields_returned": list(response_data.keys()) if isinstance(response_data, dict) else response_data.get("fields", [])
+                                    })
+                                )
+
+                            except json.JSONDecodeError as e:
+                                st.error(f"Error parsing response for {file_name}: {str(e)}")
+                                continue
+
+                        except Exception as e:
+                            st.session_state.api_logs.append(
+                                log_api_call(temp_file, None, str(e))
+                            )
+                            st.error(f"Error processing {file_name}: {str(e)}")
+                            continue
+
+                    # Create DataFrame from all results
                     if individual_results:
                         df = pd.DataFrame(individual_results)
                         columns = ['filename'] + [col for col in df.columns if col != 'filename']
                         df = df[columns]
                         st.session_state.results_df = df
                         
-                        status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
+                        status_container.success(f"Successfully processed {total_files} file{'s' if total_files > 1 else ''}!")
                     else:
                         status_container.error("No data was successfully extracted from the files.")
 
                 except Exception as e:
                     status_container.error(f"Error processing files: {str(e)}")
+            else:
+                st.warning("Please upload files or select split PDFs to process.")
 
         # Debug tab content
         with debug_tab:
@@ -851,7 +906,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                 else:
                     st.info("Upload files in the main tab to preview the API call")
             
-            with st.expander("�� Last API Call Statistics", expanded=False):
+            with st.expander("📊 Last API Call Statistics", expanded=False):
                 if hasattr(st.session_state, 'last_usage'):
                     st.write("Last API Call Statistics:")
                     col1, col2 = st.columns(2)
