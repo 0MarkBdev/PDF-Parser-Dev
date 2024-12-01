@@ -361,6 +361,15 @@ def main():
     # Create tabs for main content, PDF splitting, and debug info
     main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
 
+    # Initialize session state for PDF splitting with groups
+    if 'page_ranges_groups' not in st.session_state:
+        st.session_state.page_ranges_groups = [
+            {"name": "Group 1", "ranges": [("", "")]}
+        ]
+
+    # Create tabs for main content, PDF splitting, and debug info
+    main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
+
     # Initialize session state for PDF splitting
     if 'page_ranges' not in st.session_state:
         st.session_state.page_ranges = [("", "")]
@@ -394,116 +403,161 @@ def main():
             # Display total page count
             st.write(f"Total pages: {st.session_state.page_count}")
 
-            st.write("Enter page ranges to create new PDFs:")
-            
-            # Display existing ranges
-            new_ranges = []
-            for i, (start, end) in enumerate(st.session_state.page_ranges):
-                col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
-                
-                with col1:
-                    new_start = st.text_input("Start Page", value=start, key=f"start_range_{i}", 
-                                            placeholder="e.g., 1")
-                with col2:
-                    new_end = st.text_input("End Page", value=end, key=f"end_range_{i}", 
-                                          placeholder=f"e.g., {st.session_state.page_count}")
-                with col3:
-                    if st.button("✕", key=f"remove_range_btn_{i}"):
-                        continue
-                with col4:
-                    if i > 0 and st.button("↑", key=f"move_up_range_btn_{i}"):
-                        if i > 0:
-                            new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
-                
-                new_ranges.append((new_start, new_end))
-
-            # Update session state with new ranges
-            st.session_state.page_ranges = new_ranges
-
-            # Add new range button
-            if st.button("Add Page Range", key="add_range_btn"):
-                st.session_state.page_ranges.append(("", ""))
+            # Add "New Group" button at the top
+            if st.button("New Group"):
+                group_num = len(st.session_state.page_ranges_groups) + 1
+                st.session_state.page_ranges_groups.append({
+                    "name": f"Group {group_num}",
+                    "ranges": [("", "")]
+                })
                 st.rerun()
 
-            # Create PDF button
-            if st.button("Create PDF", key="create_pdf_btn", disabled=not any(start and end for start, end in st.session_state.page_ranges)):
-                valid_ranges = []
+            # Process each group
+            for group_idx, group in enumerate(st.session_state.page_ranges_groups):
+                st.markdown(f"### {group['name']}")
+                
+                # Allow editing group name
+                new_name = st.text_input("Group Name", 
+                                       value=group['name'], 
+                                       key=f"group_name_{group_idx}")
+                group['name'] = new_name
+
+                # Delete group button (don't allow deleting the last group)
+                if len(st.session_state.page_ranges_groups) > 1:
+                    if st.button("Delete Group", key=f"delete_group_{group_idx}"):
+                        st.session_state.page_ranges_groups.pop(group_idx)
+                        st.rerun()
+
+                st.write("Enter page ranges to create new PDFs:")
+                
+                # Display existing ranges for this group
+                new_ranges = []
+                for i, (start, end) in enumerate(group['ranges']):
+                    col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+                    
+                    with col1:
+                        new_start = st.text_input("Start Page", 
+                                                value=start, 
+                                                key=f"start_range_{group_idx}_{i}", 
+                                                placeholder="e.g., 1")
+                    with col2:
+                        new_end = st.text_input("End Page", 
+                                              value=end, 
+                                              key=f"end_range_{group_idx}_{i}", 
+                                              placeholder=f"e.g., {st.session_state.page_count}")
+                    with col3:
+                        if st.button("✕", key=f"remove_range_btn_{group_idx}_{i}"):
+                            continue
+                    with col4:
+                        if i > 0 and st.button("↑", key=f"move_up_range_btn_{group_idx}_{i}"):
+                            if i > 0:
+                                new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
+                    
+                    new_ranges.append((new_start, new_end))
+
+                # Update group ranges with new ranges
+                group['ranges'] = new_ranges
+
+                # Add new range button for this group
+                if st.button("Add Page Range", key=f"add_range_btn_{group_idx}"):
+                    group['ranges'].append(("", ""))
+                    st.rerun()
+
+                st.markdown("---")  # Add separator between groups
+
+            # Create PDFs button
+            button_label = "Create PDFs" if len(st.session_state.page_ranges_groups) > 1 else "Create PDF"
+            if st.button(button_label, key="create_pdf_btn", 
+                        disabled=not any(any(start and end for start, end in group['ranges']) 
+                                       for group in st.session_state.page_ranges_groups)):
+                valid_ranges_by_group = []
                 error_messages = []
 
-                # Validate ranges
-                for start, end in st.session_state.page_ranges:
-                    if start and end:  # Only process filled ranges
-                        try:
-                            start_num = int(start)
-                            end_num = int(end)
-                            
-                            if start_num < 1 or end_num > st.session_state.page_count:
-                                error_messages.append(f"Range {start}-{end} is outside valid pages (1-{st.session_state.page_count})")
-                            elif start_num > end_num:
-                                error_messages.append(f"Range {start}-{end} is invalid (start > end)")
-                            else:
-                                valid_ranges.append((start_num, end_num))
-                        except ValueError:
-                            error_messages.append(f"Invalid numbers in range {start}-{end}")
+                # Validate ranges for each group
+                for group in st.session_state.page_ranges_groups:
+                    group_valid_ranges = []
+                    for start, end in group['ranges']:
+                        if start and end:  # Only process filled ranges
+                            try:
+                                start_num = int(start)
+                                end_num = int(end)
+                                
+                                if start_num < 1 or end_num > st.session_state.page_count:
+                                    error_messages.append(
+                                        f"Range {start}-{end} in {group['name']} is outside valid pages (1-{st.session_state.page_count})")
+                                elif start_num > end_num:
+                                    error_messages.append(
+                                        f"Range {start}-{end} in {group['name']} is invalid (start > end)")
+                                else:
+                                    group_valid_ranges.append((start_num, end_num))
+                            except ValueError:
+                                error_messages.append(
+                                    f"Invalid numbers in range {start}-{end} in {group['name']}")
+                    
+                    if group_valid_ranges:
+                        valid_ranges_by_group.append((group['name'], group_valid_ranges))
 
                 if error_messages:
                     for msg in error_messages:
                         st.error(msg)
                 else:
-                    # Create new PDF from selected ranges
-                    pdf_document = fitz.open(os.path.join(os.getcwd(), uploaded_pdf.name))
-                    new_pdf = fitz.open()
+                    # Create new PDFs for each group
+                    for group_name, valid_ranges in valid_ranges_by_group:
+                        pdf_document = fitz.open(os.path.join(os.getcwd(), uploaded_pdf.name))
+                        new_pdf = fitz.open()
+                        
+                        all_pages = []
+                        for start, end in valid_ranges:
+                            all_pages.extend(range(start-1, end))
+                        
+                        for page_num in sorted(all_pages):
+                            new_pdf.insert_pdf(pdf_document, from_page=page_num, to_page=page_num)
+                        
+                        # Generate filename using group name
+                        base_name = os.path.splitext(uploaded_pdf.name)[0]
+                        ranges_str = '_'.join(f"{start}-{end}" for start, end in valid_ranges)
+                        safe_group_name = "".join(c if c.isalnum() else "_" for c in group_name)
+                        new_filename = f"split_{safe_group_name}_{ranges_str}_{base_name}.pdf"
+                        new_path = os.path.join(os.getcwd(), new_filename)
+                        
+                        # Save the new PDF
+                        new_pdf.save(new_path)
+                        new_pdf.close()
+                        pdf_document.close()
+                        
+                        # Add to created PDFs list
+                        st.session_state.created_pdfs.append(new_filename)
+                        st.success(f"Created {new_filename}")
                     
-                    all_pages = []
-                    for start, end in valid_ranges:
-                        all_pages.extend(range(start-1, end))
-                    
-                    for page_num in sorted(all_pages):
-                        new_pdf.insert_pdf(pdf_document, from_page=page_num, to_page=page_num)
-                    
-                    # Generate filename
-                    base_name = os.path.splitext(uploaded_pdf.name)[0]
-                    ranges_str = '_'.join(f"{start}-{end}" for start, end in valid_ranges)
-                    new_filename = f"split_{ranges_str}_{base_name}.pdf"
-                    new_path = os.path.join(os.getcwd(), new_filename)
-                    
-                    # Save the new PDF
-                    new_pdf.save(new_path)
-                    new_pdf.close()
-                    pdf_document.close()
-                    
-                    # Add to created PDFs list
-                    st.session_state.created_pdfs.append(new_filename)
-                    st.success(f"Created {new_filename}")
                     st.rerun()
 
-            # Display created PDFs
-            if st.session_state.created_pdfs:
-                st.markdown("---")
-                st.subheader("Created PDFs")
-                
-                for pdf_name in st.session_state.created_pdfs:
-                    col1, col2, col3 = st.columns([6, 2, 2])
-                    with col1:
-                        st.write(pdf_name)
-                    with col2:
-                        if st.button("Delete", key=f"del_{pdf_name}"):
-                            try:
-                                os.remove(os.path.join(os.getcwd(), pdf_name))
-                                st.session_state.created_pdfs.remove(pdf_name)
-                                # Also remove from split_pdfs_to_parse if present
-                                if pdf_name in st.session_state.split_pdfs_to_parse:
-                                    st.session_state.split_pdfs_to_parse.remove(pdf_name)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error deleting file: {str(e)}")
-                    with col3:
-                        if pdf_name in st.session_state.split_pdfs_to_parse:
-                            st.write("✓ Sent to parser")
-                        else:
-                            if st.button("Send to Parser", key=f"parse_{pdf_name}"):
-                                st.session_state.split_pdfs_to_parse.append(pdf_name)
-                                st.rerun()
+        # Display created PDFs (moved outside the uploaded_pdf condition)
+        if st.session_state.created_pdfs:
+            st.markdown("---")
+            st.subheader("Created PDFs")
+            
+            for pdf_name in st.session_state.created_pdfs:
+                col1, col2, col3 = st.columns([6, 2, 2])
+                with col1:
+                    st.write(pdf_name)
+                with col2:
+                    if st.button("Delete", key=f"del_{pdf_name}"):
+                        try:
+                            os.remove(os.path.join(os.getcwd(), pdf_name))
+                            st.session_state.created_pdfs.remove(pdf_name)
+                            # Also remove from split_pdfs_to_parse if present
+                            if pdf_name in st.session_state.split_pdfs_to_parse:
+                                st.session_state.split_pdfs_to_parse.remove(pdf_name)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting file: {str(e)}")
+                with col3:
+                    if pdf_name in st.session_state.split_pdfs_to_parse:
+                        st.write("✓ Sent to parser")
+                    else:
+                        if st.button("Send to Parser", key=f"parse_{pdf_name}"):
+                            st.session_state.split_pdfs_to_parse.append(pdf_name)
+                            st.rerun()
 
     with main_tab:
         # Create the interface
