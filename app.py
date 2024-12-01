@@ -579,7 +579,7 @@ def main():
             st.rerun()
 
         # Add checkbox here
-        col1, col2 = st.columns([1, 2])
+        col1, col2 = st.columns([3, 2])
         with col1:
             include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
         
