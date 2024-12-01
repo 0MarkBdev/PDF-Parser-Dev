@@ -532,41 +532,57 @@ def show_fullscreen_preview(pdf_file, page_count):
 
 def split_pdf_page():
     """Dedicated page for PDF splitting."""
-    # Only apply full-width styling if we're in the Split PDFs tab
-    if st.session_state.current_tab == "Split PDFs":
-        st.markdown("""
-            <style>
-            /* Target only the Split PDFs tab */
-            [data-testid="stAppViewContainer"] > .main {
-                max-width: 100%;
-            }
-            [data-testid="stAppViewContainer"] > .main > .block-container {
-                max-width: 100%;
-                padding-left: 1rem;
-                padding-right: 1rem;
-                width: 100% !important;
-            }
-            [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
-                padding-left: 0rem;
-                padding-right: 0rem;
-            }
-            /* Ensure content spans full width */
-            .element-container, .stMarkdown, .stImage, .stButton, .stNumberInput {
-                width: 100%;
-            }
-            /* Adjust image display */
-            .stImage > img {
-                width: 100%;
-                max-width: none;
-            }
-            /* Make buttons more prominent */
-            .stButton > button {
-                width: 100%;
-                border-radius: 4px;
-                padding: 0.5rem;
-            }
-            </style>
-        """, unsafe_allow_html=True)
+    # Apply full-width styling specifically for Split PDFs tab
+    st.markdown("""
+        <style>
+        /* Force full width for the Split PDFs tab */
+        section[tabindex="0"] > div.block-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        /* Remove padding from all containers in this tab */
+        section[tabindex="0"] div[data-testid="stVerticalBlock"] {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            gap: 0 !important;
+        }
+
+        /* Make all content use full width */
+        section[tabindex="0"] div.element-container,
+        section[tabindex="0"] div.row-widget,
+        section[tabindex="0"] div.stMarkdown,
+        section[tabindex="0"] div.stImage,
+        section[tabindex="0"] div.stButton,
+        section[tabindex="0"] div.stNumberInput {
+            width: 100% !important;
+            max-width: none !important;
+            padding: 0 1rem !important;
+        }
+
+        /* Ensure images take full width */
+        section[tabindex="0"] .stImage > img {
+            width: 100% !important;
+            max-width: none !important;
+        }
+
+        /* Override any fixed width containers */
+        section[tabindex="0"] .css-1d391kg,
+        section[tabindex="0"] .css-1a1fmpi,
+        section[tabindex="0"] .css-keje6w {
+            width: 100% !important;
+            max-width: none !important;
+        }
+
+        /* Make tab content full width */
+        .stTabs [data-baseweb="tab-panel"] {
+            padding-top: 1rem !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
     st.markdown("## PDF Splitting")
     st.write("Create smaller PDFs from larger documents before processing.")
