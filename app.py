@@ -678,7 +678,7 @@ Special Instructions:
 
 3. If a field is not found in the bill, use null as the value.
 
-Return the data in this structure:
+Return the data in this structure (while adding the proper suffixes for different tiers/instances/charges and totals):
 {json.dumps(field_dict, indent=2)}
 
 Remember to replace the null values with the actual extracted data or keep as null if the information is not found in the bill.
