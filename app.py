@@ -402,16 +402,16 @@ def main():
                 col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
                 
                 with col1:
-                    new_start = st.text_input("Start Page", value=start, key=f"start_{i}", 
+                    new_start = st.text_input("Start Page", value=start, key=f"start_range_{i}", 
                                             placeholder="e.g., 1")
                 with col2:
-                    new_end = st.text_input("End Page", value=end, key=f"end_{i}", 
+                    new_end = st.text_input("End Page", value=end, key=f"end_range_{i}", 
                                           placeholder=f"e.g., {st.session_state.page_count}")
                 with col3:
-                    if st.button("✕", key=f"remove_range_{i}"):
+                    if st.button("✕", key=f"remove_range_btn_{i}"):
                         continue
                 with col4:
-                    if i > 0 and st.button("↑", key=f"up_{i}"):
+                    if i > 0 and st.button("↑", key=f"move_up_range_btn_{i}"):
                         if i > 0:
                             new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
                 
@@ -421,12 +421,12 @@ def main():
             st.session_state.page_ranges = new_ranges
 
             # Add new range button
-            if st.button("Add Page Range"):
+            if st.button("Add Page Range", key="add_range_btn"):
                 st.session_state.page_ranges.append(("", ""))
                 st.rerun()
 
             # Create PDF button
-            if st.button("Create PDF", disabled=not any(start and end for start, end in st.session_state.page_ranges)):
+            if st.button("Create PDF", key="create_pdf_btn", disabled=not any(start and end for start, end in st.session_state.page_ranges)):
                 valid_ranges = []
                 error_messages = []
 
