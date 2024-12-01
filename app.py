@@ -542,7 +542,10 @@ def main():
                 with col2:
                     if st.button("Delete", key=f"del_{pdf_name}"):
                         try:
-                            os.remove(os.path.join(os.getcwd(), pdf_name))
+                            # Only delete the physical file if it's not in split_pdfs_to_parse
+                            if pdf_name not in st.session_state.split_pdfs_to_parse:
+                                os.remove(os.path.join(os.getcwd(), pdf_name))
+                            # Always remove from created_pdfs list
                             st.session_state.created_pdfs.remove(pdf_name)
                             st.rerun()
                         except Exception as e:
@@ -558,6 +561,19 @@ def main():
     with main_tab:
         # Create the interface
         st.title('Bill Parser')
+
+        # Add this section right after the title, before template selection
+        if st.session_state.split_pdfs_to_parse:
+            st.markdown("### PDFs Ready for Processing")
+            for pdf_name in list(st.session_state.split_pdfs_to_parse):  # Use list() to avoid modification during iteration
+                col1, col2 = st.columns([6, 1])
+                with col1:
+                    st.write(pdf_name)
+                with col2:
+                    if st.button("Remove", key=f"remove_from_parser_{pdf_name}"):
+                        st.session_state.split_pdfs_to_parse.remove(pdf_name)
+                        st.rerun()
+            st.markdown("---")
 
         # Template selection
         template_name = st.selectbox(
@@ -688,10 +704,16 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             
         # Add split PDFs that were sent to parser
         split_files_to_process = []
-        for split_pdf in st.session_state.split_pdfs_to_parse:
+        for split_pdf in list(st.session_state.split_pdfs_to_parse):  # Use list() to avoid modification during iteration
             try:
-                with open(os.path.join(os.getcwd(), split_pdf), "rb") as f:
-                    split_files_to_process.append(("split_pdf", split_pdf, f.read()))
+                file_path = os.path.join(os.getcwd(), split_pdf)
+                if os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        split_files_to_process.append(("split_pdf", split_pdf, f.read()))
+                else:
+                    # File doesn't exist anymore, remove it from the list
+                    st.session_state.split_pdfs_to_parse.remove(split_pdf)
+                    st.warning(f"File {split_pdf} no longer exists and has been removed from processing queue.")
             except Exception as e:
                 st.error(f"Error loading split PDF {split_pdf}: {str(e)}")
                 st.session_state.split_pdfs_to_parse.remove(split_pdf)
