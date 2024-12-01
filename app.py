@@ -585,11 +585,11 @@ def main():
         
         col3, col4 = st.columns([1, 2])
         with col3:
-            specify_meter = st.checkbox("Specify Meter/Account", value=False)
+            specify_meter = st.checkbox("Specify Meter/Account:", value=False)
         with col4:
             meter_number = st.text_input("", label_visibility="collapsed", disabled=not specify_meter)
 
-        st.write("Enter the fields you want to extract:")
+        st.write("Enter the fields to be extracted:")
 
         # Display existing fields
         new_fields = []
