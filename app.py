@@ -179,7 +179,7 @@ SIMPLE_EXAMPLES = """<examples>
     </example>
 </examples>"""
 
-# Add password protection
+# Modify check_password function
 def check_password():
     """Returns `True` if the user had the correct password."""
 
@@ -187,13 +187,19 @@ def check_password():
         """Checks whether a password entered by the user is correct."""
         if st.session_state["password"] == st.secrets["password"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Remove password from session state
+            st.session_state["is_admin"] = False
+            del st.session_state["password"]
+        elif st.session_state["password"] == st.secrets["admin_password"]:
+            st.session_state["password_correct"] = True
+            st.session_state["is_admin"] = True
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
     # First run or after logout
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
+        st.session_state["is_admin"] = False
 
     # Show input if password not yet correct
     if not st.session_state["password_correct"]:
@@ -362,8 +368,11 @@ def main():
     if 'split_pdfs_to_parse' not in st.session_state:
         st.session_state.split_pdfs_to_parse = []
 
-    # Create tabs for main content, PDF splitting, and debug info
-    main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
+    # Create tabs based on admin status
+    if st.session_state.get("is_admin", False):
+        main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
+    else:
+        main_tab, split_tab = st.tabs(["Main", "PDF Splitting"])
 
     # Initialize session state for PDF splitting with groups
     if 'page_ranges_groups' not in st.session_state:
