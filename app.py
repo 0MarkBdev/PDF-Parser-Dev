@@ -532,6 +532,37 @@ def show_fullscreen_preview(pdf_file, page_count):
 
 def split_pdf_page():
     """Dedicated page for PDF splitting."""
+    # Custom CSS to remove padding and use full width for this page only
+    st.markdown("""
+        <style>
+        /* Remove padding in containers */
+        [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+            padding-left: 0rem;
+            padding-right: 0rem;
+        }
+        
+        /* Expand main container */
+        .main > .block-container {
+            max-width: 100%;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        
+        /* Adjust image display */
+        .stImage > img {
+            width: 100%;
+            max-width: none;
+        }
+        
+        /* Make buttons more prominent */
+        .stButton > button {
+            width: 100%;
+            border-radius: 4px;
+            padding: 0.5rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown("## PDF Splitting")
     st.write("Create smaller PDFs from larger documents before processing.")
     
@@ -543,22 +574,22 @@ def split_pdf_page():
         page_count = get_pdf_page_count(uploaded_file)
         st.write(f"Total pages: {page_count}")
         
-        # Preview section
-        col1, col2 = st.columns([1, 3])
-        with col1:
+        # Preview section with full width
+        preview_col1, preview_col2 = st.columns([1, 4])  # Adjusted ratio for better use of space
+        with preview_col1:
             preview_page = st.number_input("Preview page", min_value=1, max_value=page_count, value=1) - 1
-        with col2:
+        with preview_col2:
             preview = get_page_thumbnail(uploaded_file, preview_page, 100, True)
             st.image(preview, use_column_width=True)
         
-        # Split options
+        # Split options with better spacing
         st.markdown("### Create New PDF")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
+        split_col1, split_col2, split_col3, split_col4 = st.columns([2, 2, 2, 6])  # Better column distribution
+        with split_col1:
             start_page = st.number_input("Start Page", min_value=1, max_value=page_count, value=1)
-        with col2:
+        with split_col2:
             end_page = st.number_input("End Page", min_value=start_page, max_value=page_count, value=min(start_page, page_count))
-        with col3:
+        with split_col3:
             if st.button("Create PDF", type="primary"):
                 # Create new PDF
                 new_pdf = extract_pdf_pages(uploaded_file, range(start_page-1, end_page))
@@ -575,17 +606,18 @@ def split_pdf_page():
                 })
                 st.success(f"Created PDF with pages {start_page}-{end_page}")
         
-        # Show created PDFs
+        # Show created PDFs in a cleaner layout
         if hasattr(st.session_state, 'split_pdfs') and st.session_state.split_pdfs:
             st.markdown("### Created PDFs")
             for pdf in st.session_state.split_pdfs:
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"📄 {pdf['name']}")
-                with col2:
-                    if st.button("Delete", key=f"delete_split_{pdf['name']}"):
-                        st.session_state.split_pdfs.remove(pdf)
-                        st.rerun()
+                with st.container():
+                    pdf_col1, pdf_col2 = st.columns([6, 1])
+                    with pdf_col1:
+                        st.write(f"📄 {pdf['name']}")
+                    with pdf_col2:
+                        if st.button("Delete", key=f"delete_split_{pdf['name']}"):
+                            st.session_state.split_pdfs.remove(pdf)
+                            st.rerun()
 
 def process_pdfs_with_groups(uploaded_files, client, prompt, include_calculations):
     """Process PDFs considering page groups."""
@@ -768,39 +800,6 @@ def main():
 
     # Initialize session state
     initialize_session_state()
-    
-    # Set page config to use full width
-    st.set_page_config(
-        page_title="PDF Bill Parser",
-        layout="wide",  # Use full screen width
-        initial_sidebar_state="collapsed"  # Hide sidebar by default
-    )
-
-    # Add custom CSS for full width and better styling
-    st.markdown("""
-        <style>
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 0rem;
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-        .stButton button {
-            width: 100%;
-            border-radius: 4px;
-            padding: 0.5rem;
-        }
-        .zoom-controls .stButton button {
-            font-size: 20px;
-            font-weight: bold;
-        }
-        .page-controls {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        </style>
-    """, unsafe_allow_html=True)
 
     # Create tabs for main content, PDF splitting, and debug info
     main_tab, split_tab, debug_tab = st.tabs(["Main", "Split PDFs", "Debug Info"])
