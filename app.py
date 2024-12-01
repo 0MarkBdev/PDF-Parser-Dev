@@ -364,22 +364,9 @@ def main():
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
-    # Initialize session state variables
+    # Initialize session state for split PDFs
     if 'split_pdfs_to_parse' not in st.session_state:
         st.session_state.split_pdfs_to_parse = []
-
-    # Initialize admin-specific session state variables only if admin
-    if st.session_state.get("is_admin", False):
-        if 'api_preview' not in st.session_state:
-            st.session_state.api_preview = None
-        if 'last_usage' not in st.session_state:
-            st.session_state.last_usage = None
-        if 'raw_json_response' not in st.session_state:
-            st.session_state.raw_json_response = None
-        if 'api_logs' not in st.session_state:
-            st.session_state.api_logs = []
-        if 'problematic_files' not in st.session_state:
-            st.session_state.problematic_files = []
 
     # Create tabs based on admin status
     if st.session_state.get("is_admin", False):
@@ -758,10 +745,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     )
 
                     individual_results = []
-                    
-                    # Only initialize api_logs if admin
-                    if st.session_state.get("is_admin", False):
-                        st.session_state.api_logs = []
+                    st.session_state.api_logs = []
 
                     # Process uploaded files
                     total_files = len(all_files_to_process) + len(split_files_to_process)
@@ -808,25 +792,15 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
-                            # Store API usage statistics only if admin
-                            if st.session_state.get("is_admin", False):
-                                st.session_state.last_usage = {
-                                    'input_tokens': message.usage.input_tokens,
-                                    'output_tokens': message.usage.output_tokens,
-                                    'stop_reason': message.stop_reason
-                                }
-                                st.session_state.raw_json_response = message.model_dump_json()
-                                
-                                # Log successful API call
-                                st.session_state.api_logs.append(
-                                    log_api_call(pdf_file, {
-                                        "parsed_response": response_data,
-                                        "raw_response": message.model_dump(),
-                                        "file_processed": pdf_file.name,
-                                        "num_bills_returned": 1 if isinstance(response_data, dict) else len(response_data.get("bills", [])),
-                                        "fields_returned": list(response_data.keys()) if isinstance(response_data, dict) else response_data.get("fields", [])
-                                    })
-                                )
+                            # Store last API usage statistics
+                            st.session_state.last_usage = {
+                                'input_tokens': message.usage.input_tokens,
+                                'output_tokens': message.usage.output_tokens,
+                                'stop_reason': message.stop_reason
+                            }
+
+                            # Store raw JSON response
+                            st.session_state.raw_json_response = message.model_dump_json()
 
                             # Parse response - handle direct JSON response
                             try:
@@ -938,25 +912,15 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
-                            # Store API usage statistics only if admin
-                            if st.session_state.get("is_admin", False):
-                                st.session_state.last_usage = {
-                                    'input_tokens': message.usage.input_tokens,
-                                    'output_tokens': message.usage.output_tokens,
-                                    'stop_reason': message.stop_reason
-                                }
-                                st.session_state.raw_json_response = message.model_dump_json()
-                                
-                                # Log successful API call
-                                st.session_state.api_logs.append(
-                                    log_api_call(temp_file, {
-                                        "parsed_response": response_data,
-                                        "raw_response": message.model_dump(),
-                                        "file_processed": file_name,
-                                        "num_bills_returned": 1 if isinstance(response_data, dict) else len(response_data.get("bills", [])),
-                                        "fields_returned": list(response_data.keys()) if isinstance(response_data, dict) else response_data.get("fields", [])
-                                    })
-                                )
+                            # Store last API usage statistics
+                            st.session_state.last_usage = {
+                                'input_tokens': message.usage.input_tokens,
+                                'output_tokens': message.usage.output_tokens,
+                                'stop_reason': message.stop_reason
+                            }
+
+                            # Store raw JSON response
+                            st.session_state.raw_json_response = message.model_dump_json()
 
                             # Parse response
                             try:
