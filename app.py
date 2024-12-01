@@ -535,7 +535,7 @@ def split_pdf_page():
     st.markdown("## PDF Splitting")
     st.write("Create smaller PDFs from larger documents before processing.")
     
-    # File upload with full width
+    # File upload
     uploaded_file = st.file_uploader("Upload PDF to Split", type=['pdf'], key="split_pdf_uploader")
     
     if uploaded_file:
@@ -543,22 +543,22 @@ def split_pdf_page():
         page_count = get_pdf_page_count(uploaded_file)
         st.write(f"Total pages: {page_count}")
         
-        # Preview section with full width
-        preview_col1, preview_col2 = st.columns([1, 5])  # Even more space for preview
-        with preview_col1:
+        # Preview section
+        col1, col2 = st.columns([1, 3])
+        with col1:
             preview_page = st.number_input("Preview page", min_value=1, max_value=page_count, value=1) - 1
-        with preview_col2:
+        with col2:
             preview = get_page_thumbnail(uploaded_file, preview_page, 100, True)
             st.image(preview, use_column_width=True)
         
-        # Split options with better spacing
+        # Split options
         st.markdown("### Create New PDF")
-        split_col1, split_col2, split_col3, split_col4 = st.columns([2, 2, 2, 6])
-        with split_col1:
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
             start_page = st.number_input("Start Page", min_value=1, max_value=page_count, value=1)
-        with split_col2:
+        with col2:
             end_page = st.number_input("End Page", min_value=start_page, max_value=page_count, value=min(start_page, page_count))
-        with split_col3:
+        with col3:
             if st.button("Create PDF", type="primary"):
                 # Create new PDF
                 new_pdf = extract_pdf_pages(uploaded_file, range(start_page-1, end_page))
@@ -575,18 +575,17 @@ def split_pdf_page():
                 })
                 st.success(f"Created PDF with pages {start_page}-{end_page}")
         
-        # Show created PDFs in a cleaner layout
+        # Show created PDFs
         if hasattr(st.session_state, 'split_pdfs') and st.session_state.split_pdfs:
             st.markdown("### Created PDFs")
             for pdf in st.session_state.split_pdfs:
-                with st.container():
-                    pdf_col1, pdf_col2 = st.columns([6, 1])
-                    with pdf_col1:
-                        st.write(f"📄 {pdf['name']}")
-                    with pdf_col2:
-                        if st.button("Delete", key=f"delete_split_{pdf['name']}"):
-                            st.session_state.split_pdfs.remove(pdf)
-                            st.rerun()
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"📄 {pdf['name']}")
+                with col2:
+                    if st.button("Delete", key=f"delete_split_{pdf['name']}"):
+                        st.session_state.split_pdfs.remove(pdf)
+                        st.rerun()
 
 def process_pdfs_with_groups(uploaded_files, client, prompt, include_calculations):
     """Process PDFs considering page groups."""
@@ -770,128 +769,349 @@ def main():
     # Initialize session state
     initialize_session_state()
 
-    # Create tabs with unique keys
-    tabs = st.tabs(["Main", "Split PDFs", "Debug Info"])
-    
-    # Add tab index to session state
-    if 'active_tab' not in st.session_state:
-        st.session_state.active_tab = 0
-        
-    # Main tab
-    with tabs[0]:
-        st.session_state.active_tab = 0
+    # Create tabs for main content, PDF splitting, and debug info
+    main_tab, split_tab, debug_tab = st.tabs(["Main", "Split PDFs", "Debug Info"])
+
+    with main_tab:
+        # Create the interface
         st.title('Bill Parser')
-        # ... rest of main tab code ...
 
-    # Split PDFs tab
-    with tabs[1]:
-        st.session_state.active_tab = 1
-        # Inject CSS only for Split PDFs tab
-        st.markdown("""
-            <style>
-            /* Target only the Split PDFs tab content */
-            [data-testid="stTabsContent"] > div:nth-of-type(2) .block-container {
-                max-width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
+        # Template selection
+        template_name = st.selectbox(
+            "Select Template",
+            options=list(TEMPLATES.keys()),
+            key="template_selector"
+        )
 
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div[data-testid="stVerticalBlock"] {
-                padding-left: 0 !important;
-                padding-right: 0 !important;
-                gap: 0 !important;
-            }
+        # Initialize fields based on template
+        if 'fields' not in st.session_state or 'current_template' not in st.session_state:
+            st.session_state.fields = TEMPLATES[template_name]
+            st.session_state.current_template = template_name
+        elif st.session_state.current_template != template_name:
+            st.session_state.fields = TEMPLATES[template_name]
+            st.session_state.current_template = template_name
+            st.rerun()
 
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div.element-container,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div.row-widget,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div.stMarkdown,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div.stImage,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div.stButton,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) div.stNumberInput {
-                width: 100% !important;
-                max-width: none !important;
-                padding: 0 1rem !important;
-            }
+        # Add checkbox here
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
+        
+        col3, col4 = st.columns([1, 2])
+        with col3:
+            specify_meter = st.checkbox("Specify Meter/Account", value=False)
+        with col4:
+            meter_number = st.text_input("", label_visibility="collapsed", disabled=not specify_meter)
 
-            [data-testid="stTabsContent"] > div:nth-of-type(2) .stImage > img {
-                width: 100% !important;
-                max-width: none !important;
-            }
+        st.write("Enter the fields you want to extract:")
 
-            [data-testid="stTabsContent"] > div:nth-of-type(2) .css-1d391kg,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) .css-1a1fmpi,
-            [data-testid="stTabsContent"] > div:nth-of-type(2) .css-keje6w {
-                width: 100% !important;
-                max-width: none !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
+        # Display existing fields
+        new_fields = []
+
+        for i, (field, format_hint) in enumerate(st.session_state.fields):
+            container = st.container()
+            col1, col2, col3 = container.columns([6, 1.5, 1.2])
+
+            with col1:
+                new_field = st.text_input(f"Field {i + 1}", value=field, key=f"field_input_{i}",
+                                        label_visibility="collapsed")
+            with col2:
+                new_format = st.text_input("Format", value=format_hint, key=f"format_input_{i}",
+                                         label_visibility="collapsed")
+
+            with col3:
+                btn_container = st.container()
+                c1, c2, c3 = btn_container.columns(3)
+                with c1:
+                    if i > 0 and st.button("↑", key=f"up_{i}", use_container_width=True):
+                        fields = list(st.session_state.fields)
+                        fields[i], fields[i - 1] = fields[i - 1], fields[i]
+                        st.session_state.fields = fields
+                        st.rerun()
+                with c2:
+                    if i < len(st.session_state.fields) - 1 and st.button("↓", key=f"down_{i}", use_container_width=True):
+                        fields = list(st.session_state.fields)
+                        fields[i], fields[i + 1] = fields[i + 1], fields[i]
+                        st.session_state.fields = fields
+                        st.rerun()
+                with c3:
+                    if st.button("✕", key=f"remove_button_{i}", use_container_width=True):
+                        st.session_state.fields.pop(i)
+                        st.rerun()
+
+            new_fields.append((new_field, new_format))
+
+        # Update session state with new field values
+        st.session_state.fields = new_fields
+
+        # Add new field button
+        if st.button("Add Field"):
+            st.session_state.fields.append(("", ""))
+            st.rerun()
+
+        # Create the prompt string based on fields
+        field_dict = {field: "" for field, _ in st.session_state.fields if field}
+
+        tiered_calculation_instructions = """
+       a. Use the plain field name for the first tiers/instances/charges (e.g., "FIELD")
+       b. Add a suffix for each additional tiers/instances/charges (e.g., "FIELD_2", "FIELD_3")
+       c. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
+       d. If there isn't a clearly stated total, calculate and create one with the sum of the tiers/instances/charges. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal").""" if include_calculations else """
+       a. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
+       b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers/instances/charges. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
+
+        prompt = f"""Your objective is to extract key information from this utility bill and present it in a standardized JSON format. Follow these steps:
+
+1. Carefully analyze the utility bill content.
+2. Identify and extract the required fields.
+3. Format the extracted information according to the specifications.
+4. Handle any tiered charges appropriately.
+5. Compile the final JSON output.
+
+Required Fields{f" to be extracted only for {meter_number}" if specify_meter and meter_number else ""}:
+{json.dumps(field_dict, indent=2)}
+
+Special Instructions:
+1. For charges that show multiple charges with the main part of the name identical but with seasonal suffixes (e.g., "Charge A Summer", "Charge A Winter"), or tiered charges (like water service charges), or multiple instances of the same charge (when a rate changes in the middle of the bill period), or any other case where the same charge is shown multiple times with different values, use the following instructions:{tiered_calculation_instructions}
+
+2. Formatting Rules:
+   - Each field should be a separate key at the root level of the JSON
+   - Do not nest the values in sub-objects
+   - Return each amount as a plain number
+   - Do not include gallons, rates, or date ranges
+
+3. If a field is not found in the bill, use null as the value.
+
+Return the data in this structure:
+{json.dumps(field_dict, indent=2)}
+
+Remember to replace the null values with the actual extracted data or keep as null if the information is not found in the bill.
+
+Provide ONLY the JSON object as your final output, with no additional text."""
+
+        # Add file uploader
+        uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
+
+        if uploaded_files:
+            # PDF grouping interface
+            st.write("## PDF Management")
+            groups_changed = manage_pdf_groups(uploaded_files)
+
+            # Process Bills button logic
+            if st.button('Process Bills'):
+                try:
+                    # Create the client with custom headers
+                    pdf_client = Anthropic(
+                        api_key=st.secrets["ANTHROPIC_API_KEY"],
+                        default_headers={"anthropic-beta": "pdfs-2024-09-25"}
+                    )
+
+                    # Process PDFs with groups
+                    individual_results = process_pdfs_with_groups(uploaded_files, pdf_client, prompt, include_calculations)
+
+                    if individual_results:
+                        df = pd.DataFrame(individual_results)
+                        columns = ['filename'] + [col for col in df.columns if col != 'filename']
+                        df = df[columns]
+                        st.session_state.results_df = df
+                    else:
+                        st.error("No data was successfully extracted from the files.")
+
+                except Exception as e:
+                    st.error(f"Error processing files: {str(e)}")
+
+    with split_tab:
         split_pdf_page()
-
-    # Debug tab
-    with tabs[2]:
-        st.session_state.active_tab = 2
-        # ... rest of debug tab code ...
-        pass
-
-
-def split_pdf_page():
-    """Dedicated page for PDF splitting."""
-    st.markdown("## PDF Splitting")
-    st.write("Create smaller PDFs from larger documents before processing.")
     
-    # File upload with full width
-    uploaded_file = st.file_uploader("Upload PDF to Split", type=['pdf'], key="split_pdf_uploader")
-    
-    if uploaded_file:
-        # Get page count
-        page_count = get_pdf_page_count(uploaded_file)
-        st.write(f"Total pages: {page_count}")
-        
-        # Preview section with full width
-        preview_col1, preview_col2 = st.columns([1, 5])  # Even more space for preview
-        with preview_col1:
-            preview_page = st.number_input("Preview page", min_value=1, max_value=page_count, value=1) - 1
-        with preview_col2:
-            preview = get_page_thumbnail(uploaded_file, preview_page, 100, True)
-            st.image(preview, use_column_width=True)
-        
-        # Split options with better spacing
-        st.markdown("### Create New PDF")
-        split_col1, split_col2, split_col3, split_col4 = st.columns([2, 2, 2, 6])
-        with split_col1:
-            start_page = st.number_input("Start Page", min_value=1, max_value=page_count, value=1)
-        with split_col2:
-            end_page = st.number_input("End Page", min_value=start_page, max_value=page_count, value=min(start_page, page_count))
-        with split_col3:
-            if st.button("Create PDF", type="primary"):
-                # Create new PDF
-                new_pdf = extract_pdf_pages(uploaded_file, range(start_page-1, end_page))
+    with debug_tab:
+        # Create sections using expanders
+        with st.expander("📤 API Call Preview", expanded=True):
+            st.write("Preview the API call that will be sent when processing files")
+            
+            if uploaded_files:
+                col1, col2 = st.columns([1, 1])
                 
-                # Add to session state for main page
-                if 'split_pdfs' not in st.session_state:
-                    st.session_state.split_pdfs = []
+                # Create buttons side by side but keep display area unified
+                preview_clicked = col1.button("Generate API Call Preview")
+                count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
                 
-                # Generate unique name
-                new_name = f"Split_{start_page}-{end_page}_{uploaded_file.name}"
-                st.session_state.split_pdfs.append({
-                    'name': new_name,
-                    'content': new_pdf
-                })
-                st.success(f"Created PDF with pages {start_page}-{end_page}")
+                if preview_clicked or count_tokens_clicked:
+                    # If token counting was requested, show it first
+                    if count_tokens_clicked:
+                        try:
+                            token_count = count_tokens(client, prompt, include_calculations)
+                            st.success("Token Count Results:")
+                            # Print the full response for debugging
+                            print("Token count response:", token_count)
+                            st.json(token_count)  # Show the full response
+                            st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                        except Exception as e:
+                            st.error(f"Error counting tokens: {str(e)}")
+                            st.error("Please check the API documentation or try again later.")
+                            
+                        # Add a visual separator
+                        st.markdown("---")
+                    
+                    # Show the API preview (same for both buttons)
+                    preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                    st.session_state.api_preview = preview
+                    st.json(preview)
+            else:
+                st.info("Upload files in the main tab to preview the API call")
         
-        # Show created PDFs in a cleaner layout
-        if hasattr(st.session_state, 'split_pdfs') and st.session_state.split_pdfs:
-            st.markdown("### Created PDFs")
-            for pdf in st.session_state.split_pdfs:
-                with st.container():
-                    pdf_col1, pdf_col2 = st.columns([6, 1])
-                    with pdf_col1:
-                        st.write(f"📄 {pdf['name']}")
-                    with pdf_col2:
-                        if st.button("Delete", key=f"delete_split_{pdf['name']}"):
-                            st.session_state.split_pdfs.remove(pdf)
-                            st.rerun()
+        with st.expander("📊 Last API Call Statistics", expanded=False):
+            if hasattr(st.session_state, 'last_usage'):
+                st.write("Last API Call Statistics:")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
+                with col2:
+                    st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
+                
+                # Add stop reason explanation
+                stop_reason = st.session_state.last_usage['stop_reason']
+                explanation = {
+                    "end_turn": "The model completed its response naturally.",
+                    "max_tokens": "The response was cut off due to reaching the token limit.",
+                    "stop_sequence": "The model stopped at a designated stop sequence.",
+                    "error": "The response was terminated due to an error."
+                }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
+                
+                st.write("**Stop Reason:**")
+                st.info(explanation)
+            else:
+                st.write("No API calls made yet.")
+        
+        with st.expander("📝 Raw JSON Response", expanded=False):
+            if hasattr(st.session_state, 'raw_json_response'):
+                st.write("Raw JSON Response from last API call:")
+                st.code(st.session_state.raw_json_response, language='json')
+            else:
+                st.write("No API response data available yet.")
+
+        with st.expander("📋 API Call Logs", expanded=True):
+            if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
+                for log in st.session_state.api_logs:
+                    st.markdown(f"### File: {log['file_processed']}")
+                    st.markdown("**Timestamp:**")
+                    st.write(log['timestamp'])
+                    
+                    if log['error']:
+                        st.error(f"**Error:** {log['error']}")
+                    else:
+                        st.markdown("**Number of Bills Returned:**")
+                        st.write(log['response']['num_bills_returned'])
+                        st.markdown("**Fields Returned:**")
+                        st.write(log['response']['fields_returned'])
+                        
+                        # Use tabs instead of nested expanders
+                        raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
+                        
+                        with raw_tab:
+                            st.json(log['response']['raw_response'])
+                        
+                        with parsed_tab:
+                            st.json(log['response']['parsed_response'])
+                        
+                    # Add a visual separator between files
+                    st.markdown("---")
+            else:
+                st.info("No API calls logged yet.")
+
+        with st.expander("⚠️ Problematic Files", expanded=True):
+            if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
+                for file_log in st.session_state.problematic_files:
+                    st.markdown(f"### File: {file_log['filename']}")
+                    st.markdown("**Response data:**")
+                    st.json(file_log['response'])
+                    st.markdown("---")
+            else:
+                st.info("No problematic files detected in the last processing run.")
+
+    # Move Excel creation and download button outside the Process Bills button block
+    if hasattr(st.session_state, 'results_df'):
+        # Get the original field order from session state
+        original_fields = [field for field, _ in st.session_state.fields if field]
+        
+        # Group and sort columns by base names while preserving original field order
+        def get_base_name(col):
+            # Skip filename column
+            if col == 'filename':
+                return '000_filename'  # Changed to ensure filename is always first
+            # Split on underscore and get base name
+            parts = col.split('_')
+            base = '_'.join(parts[:-1]) if len(parts) > 1 else col
+            # Get the original position of the base field
+            try:
+                original_pos = original_fields.index(base)
+            except ValueError:
+                # If base not in original fields, put it at the end
+                original_pos = len(original_fields)
+            return f"{original_pos + 1:03d}_{base}"  # Added +1 to make room for filename
+
+        def get_suffix_priority(col):
+            # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
+            if col == 'filename':
+                return -1  # Ensure filename stays first
+            if '_' not in col:
+                return 0
+            suffix = col.split('_')[-1]
+            priorities = {
+                '2': 1,
+                '3': 2,
+                '4': 3,
+                'Total': 98,
+                'CalcTotal': 99
+            }
+            return priorities.get(suffix, 50)  # Default priority for unknown suffixes
+
+        # Sort columns first by original field order (via base name), then by suffix priority
+        columns = st.session_state.results_df.columns.tolist()
+        sorted_columns = sorted(
+            columns,
+            key=lambda x: (get_base_name(x), get_suffix_priority(x))
+        )
+
+        # Reorder the DataFrame columns
+        df_sorted = st.session_state.results_df[sorted_columns]
+        
+        # Create Excel file with sorted columns
+        excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
+        df_sorted.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
+
+        # Auto-adjust column widths more safely
+        worksheet = excel_buffer.sheets['Extracted Data']
+        for idx, col in enumerate(df_sorted.columns):
+            # Get max length of column data and column header
+            max_length = max(
+                df_sorted[col].astype(str).apply(len).max(),
+                len(str(col))
+            )  # Properly close max() function
+            
+            # Limit column width to a reasonable maximum (e.g., 50 characters)
+            adjusted_width = min(max_length + 2, 50)
+            
+            # Convert numeric index to Excel column letter
+            col_letter = chr(65 + (idx % 26))
+            if idx >= 26:
+                col_letter = chr(64 + (idx // 26)) + col_letter
+            worksheet.column_dimensions[col_letter].width = adjusted_width
+
+        excel_buffer.close()
+
+        # Add download button
+        with open('results.xlsx', 'rb') as f:
+            st.download_button(
+                'Download Results',
+                f,
+                'results.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+        # Display the results in the app with sorted columns
+        st.write("### Extracted Data")
+        st.dataframe(df_sorted)
+
 
 # Run the app with password protection
 # Run the app with password protection
