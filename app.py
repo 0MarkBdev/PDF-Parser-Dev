@@ -723,7 +723,13 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         if split_files_to_process:
             st.write("Split PDFs to be processed:")
             for _, name, _ in split_files_to_process:
-                st.write(f"- {name}")
+                col1, col2 = st.columns([6, 1])
+                with col1:
+                    st.write(f"- {name}")
+                with col2:
+                    if st.button("Remove", key=f"remove_from_parser_{name}"):
+                        st.session_state.split_pdfs_to_parse.remove(name)
+                        st.rerun()
 
         # Process Bills button logic
         if st.button('Process Bills'):
