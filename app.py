@@ -554,6 +554,9 @@ def split_pdf_page():
             justify-content: center;
             gap: 0.5rem;
         }
+        .stNumberInput input {
+            width: 80px;
+        }
         </style>
     """, unsafe_allow_html=True)
     
@@ -574,18 +577,29 @@ def split_pdf_page():
         page_count = get_pdf_page_count(uploaded_file)
         st.write(f"Total pages: {page_count}")
         
-        # Zoom controls
-        col1, col2, col3 = st.columns([1, 8, 1])
+        # Zoom controls with direct input
+        col1, col2, col3, col4 = st.columns([1, 6, 2, 1])
         with col1:
             if st.button("-", key="split_zoom_out"):
                 st.session_state.split_zoom_level = max(50, st.session_state.split_zoom_level - 25)
                 st.rerun()
         with col2:
-            st.slider("Zoom Level", 50, 300, st.session_state.split_zoom_level, 25,
+            st.slider("", 50, 300, st.session_state.split_zoom_level, 25,
                      key="split_zoom_slider",
                      on_change=lambda: setattr(st.session_state, 'split_zoom_level',
                                              st.session_state.split_zoom_slider))
         with col3:
+            # Direct zoom input
+            new_zoom = st.number_input("Zoom Level", 
+                                     min_value=50, 
+                                     max_value=300, 
+                                     value=st.session_state.split_zoom_level,
+                                     step=1,
+                                     label_visibility="collapsed")
+            if new_zoom != st.session_state.split_zoom_level:
+                st.session_state.split_zoom_level = new_zoom
+                st.rerun()
+        with col4:
             if st.button("+", key="split_zoom_in"):
                 st.session_state.split_zoom_level = min(300, st.session_state.split_zoom_level + 25)
                 st.rerun()
@@ -605,15 +619,17 @@ def split_pdf_page():
                             preview = get_page_thumbnail(uploaded_file, page_idx, st.session_state.split_zoom_level)
                             st.image(preview, use_column_width=True)
                             
-                            # Checkbox centered below preview
-                            _, check_col, _ = st.columns([1, 2, 1])
-                            with check_col:
+                            # Checkbox and page number in one row
+                            check_col1, check_col2 = st.columns([1, 1])
+                            with check_col1:
                                 if st.checkbox("Select", value=page_idx in st.session_state.selected_split_pages,
                                             key=f"split_select_{page_idx}",
                                             label_visibility="collapsed"):
                                     st.session_state.selected_split_pages.add(page_idx)
                                 else:
                                     st.session_state.selected_split_pages.discard(page_idx)
+                            with check_col2:
+                                st.write(f"Page {page_idx + 1}")
         
         # Create PDF controls
         st.markdown("### Create New PDF")
@@ -622,7 +638,8 @@ def split_pdf_page():
             if not st.session_state.selected_split_pages:
                 st.warning("Please select pages to create a new PDF")
             else:
-                st.write(f"Selected pages: {sorted([p+1 for p in st.session_state.selected_split_pages])}")
+                selected_pages_list = sorted([p+1 for p in st.session_state.selected_split_pages])
+                st.write(f"Selected pages: {selected_pages_list}")
         with col2:
             if st.button("Create PDF", type="primary", disabled=not st.session_state.selected_split_pages):
                 # Create new PDF from selected pages
@@ -633,14 +650,14 @@ def split_pdf_page():
                 if 'split_pdfs' not in st.session_state:
                     st.session_state.split_pdfs = []
                 
-                # Generate unique name
-                page_range = f"{selected_pages[0]+1}-{selected_pages[-1]+1}"
-                new_name = f"Split_{page_range}_{uploaded_file.name}"
+                # Generate unique name with comma-separated page numbers
+                page_numbers = ','.join(str(p+1) for p in selected_pages)
+                new_name = f"split_{page_numbers}_{uploaded_file.name}"
                 st.session_state.split_pdfs.append({
                     'name': new_name,
                     'content': new_pdf
                 })
-                st.success(f"Created PDF with pages {page_range}")
+                st.success(f"Created PDF with pages {page_numbers}")
                 st.session_state.selected_split_pages = set()  # Clear selection
                 st.rerun()
         
