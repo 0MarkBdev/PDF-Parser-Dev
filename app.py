@@ -562,19 +562,6 @@ def main():
         # Create the interface
         st.title('Bill Parser')
 
-        # Add this section right after the title, before template selection
-        if st.session_state.split_pdfs_to_parse:
-            st.markdown("### PDFs Ready for Processing")
-            for pdf_name in list(st.session_state.split_pdfs_to_parse):  # Use list() to avoid modification during iteration
-                col1, col2 = st.columns([6, 1])
-                with col1:
-                    st.write(pdf_name)
-                with col2:
-                    if st.button("Remove", key=f"remove_from_parser_{pdf_name}"):
-                        st.session_state.split_pdfs_to_parse.remove(pdf_name)
-                        st.rerun()
-            st.markdown("---")
-
         # Template selection
         template_name = st.selectbox(
             "Select Template",
