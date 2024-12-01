@@ -6,6 +6,10 @@ import json
 from typing import Any
 import math
 from datetime import datetime
+import PyPDF2
+from io import BytesIO
+import tempfile
+import fitz  # PyMuPDF for PDF thumbnails and previews
 
 TEMPLATES = {
     "Water Bills": [
@@ -345,10 +349,224 @@ def log_api_call(file: Any, response: Any, error: str = None) -> dict:
         "error": error
     }
 
+def get_pdf_page_count(pdf_file):
+    """Get the number of pages in a PDF file."""
+    pdf_file.seek(0)
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    page_count = len(pdf_reader.pages)
+    pdf_file.seek(0)
+    return page_count
+
+def get_page_thumbnail(pdf_file, page_num):
+    """Generate a thumbnail for a specific page of a PDF."""
+    pdf_file.seek(0)
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+        temp_file.write(pdf_file.read())
+        temp_file_path = temp_file.name
+    
+    doc = fitz.open(temp_file_path)
+    page = doc[page_num]
+    pix = page.get_pixmap(matrix=fitz.Matrix(0.2, 0.2))  # Scale down for thumbnail
+    img_data = pix.tobytes("png")
+    doc.close()
+    
+    return img_data
+
+def extract_pdf_pages(pdf_file, page_numbers):
+    """Extract specific pages from a PDF and return as a new PDF file object."""
+    pdf_file.seek(0)
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    pdf_writer = PyPDF2.PdfWriter()
+    
+    for page_num in page_numbers:
+        pdf_writer.add_page(pdf_reader.pages[page_num])
+    
+    output = BytesIO()
+    pdf_writer.write(output)
+    output.seek(0)
+    return output
+
+def initialize_session_state():
+    """Initialize session state variables for PDF handling."""
+    if 'pdf_groups' not in st.session_state:
+        st.session_state.pdf_groups = {}  # {pdf_name: [{name: str, pages: list[int]}]}
+    if 'current_pdf' not in st.session_state:
+        st.session_state.current_pdf = None
+    if 'page_previews' not in st.session_state:
+        st.session_state.page_previews = {}
+
+def manage_pdf_groups(uploaded_files):
+    """Manage PDF groups in the UI."""
+    groups_changed = False
+    
+    for pdf_file in uploaded_files:
+        if pdf_file.name not in st.session_state.pdf_groups:
+            st.session_state.pdf_groups[pdf_file.name] = []
+            groups_changed = True
+        
+        page_count = get_pdf_page_count(pdf_file)
+        
+        st.write(f"### {pdf_file.name}")
+        
+        if page_count == 1:
+            st.info("Single-page PDF - will be processed as one bill")
+            continue
+        
+        # Show page thumbnails with checkboxes
+        st.write("Select pages to group together:")
+        cols = st.columns(4)
+        selected_pages = []
+        
+        for i in range(page_count):
+            with cols[i % 4]:
+                if pdf_file.name not in st.session_state.page_previews:
+                    st.session_state.page_previews[pdf_file.name] = {}
+                if i not in st.session_state.page_previews[pdf_file.name]:
+                    st.session_state.page_previews[pdf_file.name][i] = get_page_thumbnail(pdf_file, i)
+                
+                st.image(st.session_state.page_previews[pdf_file.name][i], caption=f"Page {i+1}")
+                if st.checkbox(f"Select Page {i+1}", key=f"{pdf_file.name}_page_{i}"):
+                    selected_pages.append(i)
+        
+        # Group creation
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            group_name = st.text_input("Group Name (optional)", key=f"group_name_{pdf_file.name}")
+        with col2:
+            if st.button("Create Group", key=f"create_group_{pdf_file.name}") and selected_pages:
+                group = {
+                    "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
+                    "pages": selected_pages
+                }
+                st.session_state.pdf_groups[pdf_file.name].append(group)
+                groups_changed = True
+                st.rerun()
+        
+        # Show existing groups
+        if st.session_state.pdf_groups[pdf_file.name]:
+            st.write("Existing Groups:")
+            for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"{group['name']}: Pages {[p+1 for p in group['pages']]}")
+                with col2:
+                    if st.button("Delete", key=f"delete_group_{pdf_file.name}_{i}"):
+                        st.session_state.pdf_groups[pdf_file.name].pop(i)
+                        groups_changed = True
+                        st.rerun()
+    
+    return groups_changed
+
+def process_pdfs_with_groups(uploaded_files, client, prompt, include_calculations):
+    """Process PDFs considering page groups."""
+    individual_results = []
+    st.session_state.api_logs = []
+    status_container = st.empty()
+    
+    total_units = sum(1 if get_pdf_page_count(f) == 1 or f.name not in st.session_state.pdf_groups
+                     else len(st.session_state.pdf_groups[f.name])
+                     for f in uploaded_files)
+    
+    current_unit = 0
+    
+    for pdf_file in uploaded_files:
+        page_count = get_pdf_page_count(pdf_file)
+        
+        if page_count == 1 or pdf_file.name not in st.session_state.pdf_groups:
+            # Process single-page PDF or ungrouped multi-page PDF as one unit
+            current_unit += 1
+            status_container.info(f"Processing unit {current_unit} of {total_units}")
+            
+            result = process_single_pdf(pdf_file, client, prompt, include_calculations)
+            if result:
+                individual_results.append(result)
+        else:
+            # Process each group as a separate unit
+            for group in st.session_state.pdf_groups[pdf_file.name]:
+                current_unit += 1
+                status_container.info(f"Processing unit {current_unit} of {total_units}: {group['name']}")
+                
+                # Extract pages for this group
+                group_pdf = extract_pdf_pages(pdf_file, group['pages'])
+                result = process_single_pdf(group_pdf, client, prompt, include_calculations, 
+                                         filename=f"{pdf_file.name} - {group['name']}")
+                if result:
+                    individual_results.append(result)
+    
+    status_container.success(f"Successfully processed {current_unit} units!")
+    return individual_results
+
+def process_single_pdf(pdf_file, client, prompt, include_calculations, filename=None):
+    """Process a single PDF unit (either a single-page PDF or a group of pages)."""
+    try:
+        message_content = [
+            {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": base64.b64encode(pdf_file.read() if isinstance(pdf_file, BytesIO) 
+                                          else pdf_file.getvalue()).decode()
+                }
+            },
+            {
+                "type": "text",
+                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+            },
+            {
+                "type": "text",
+                "text": prompt
+            }
+        ]
+        
+        if isinstance(pdf_file, BytesIO):
+            pdf_file.seek(0)
+        else:
+            pdf_file.seek(0)
+        
+        message = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=8192,
+            temperature=0,
+            system="You are an expert utility bill analyst AI specializing in data extraction and standardization...",
+            messages=[{"role": "user", "content": message_content}]
+        )
+        
+        response_data = json.loads(message.content[0].text)
+        if isinstance(response_data, dict):
+            response_data['filename'] = filename or pdf_file.name
+            return response_data
+        elif response_data.get('bills') and len(response_data['bills']) > 0:
+            bill_dict = dict(zip(response_data['fields'], response_data['bills'][0]))
+            bill_dict['filename'] = filename or pdf_file.name
+            return bill_dict
+        
+        st.session_state.api_logs.append(
+            log_api_call(pdf_file, {
+                "parsed_response": response_data,
+                "raw_response": message.model_dump(),
+                "file_processed": filename or pdf_file.name,
+                "num_bills_returned": 1 if isinstance(response_data, dict) else len(response_data.get("bills", [])),
+                "fields_returned": list(response_data.keys()) if isinstance(response_data, dict) else response_data.get("fields", [])
+            })
+        )
+        
+        return None
+        
+    except Exception as e:
+        st.session_state.api_logs.append(
+            log_api_call(pdf_file, None, str(e))
+        )
+        st.error(f"Error processing {filename or pdf_file.name}: {str(e)}")
+        return None
+
 # Main app
 def main():
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+
+    # Initialize session state
+    initialize_session_state()
 
     # Create tabs for main content and debug info
     main_tab, debug_tab = st.tabs(["Main", "Debug Info"])
@@ -390,24 +608,18 @@ def main():
         new_fields = []
 
         for i, (field, format_hint) in enumerate(st.session_state.fields):
-            # Use container to enforce consistent spacing
             container = st.container()
-
-            # Create columns with exact proportions - making buttons narrower
             col1, col2, col3 = container.columns([6, 1.5, 1.2])
 
-            # Main fields in first two columns
             with col1:
                 new_field = st.text_input(f"Field {i + 1}", value=field, key=f"field_input_{i}",
-                                          label_visibility="collapsed")
+                                        label_visibility="collapsed")
             with col2:
                 new_format = st.text_input("Format", value=format_hint, key=f"format_input_{i}",
-                                           label_visibility="collapsed")
+                                         label_visibility="collapsed")
 
-            # Buttons in last column, with fixed small width
             with col3:
                 btn_container = st.container()
-                # Force buttons to align by using a single line
                 c1, c2, c3 = btn_container.columns(3)
                 with c1:
                     if i > 0 and st.button("↑", key=f"up_{i}", use_container_width=True):
@@ -479,12 +691,13 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         # Add file uploader
         uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
 
-        # Process Bills button logic
-        if st.button('Process Bills'):
-            if uploaded_files:
-                status_container = st.empty()
-                status_container.info("Processing files one at a time...")
+        if uploaded_files:
+            # PDF grouping interface
+            st.write("## PDF Management")
+            groups_changed = manage_pdf_groups(uploaded_files)
 
+            # Process Bills button logic
+            if st.button('Process Bills'):
                 try:
                     # Create the client with custom headers
                     pdf_client = Anthropic(
@@ -492,220 +705,125 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         default_headers={"anthropic-beta": "pdfs-2024-09-25"}
                     )
 
-                    # Change variable name from processed_results to be clearer about individual processing
-                    individual_results = []  # Changed from processed_results for clarity
-                    st.session_state.api_logs = []
+                    # Process PDFs with groups
+                    individual_results = process_pdfs_with_groups(uploaded_files, pdf_client, prompt, include_calculations)
 
-                    # Process each PDF individually
-                    for file_index, pdf_file in enumerate(uploaded_files):
-                        status_container.info(f"Processing file {file_index + 1} of {len(uploaded_files)}: {pdf_file.name}")
-                        
-                        # Prepare message content for this PDF
-                        message_content = [
-                            {
-                                "type": "document",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "application/pdf",
-                                    "data": base64.b64encode(pdf_file.read()).decode()
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                        pdf_file.seek(0)  # Reset file pointer
-
-                        try:
-                            # Send to Claude API
-                            message = pdf_client.messages.create(
-                                model="claude-3-5-sonnet-20241022",
-                                max_tokens=8192,
-                                temperature=0,
-                                system="You are an expert utility bill analyst AI specializing in data extraction and standardization. Your primary responsibilities include:\n\n1. Accurately extracting specific fields from utility bills\n2. Handling complex cases such as tiered charges\n3. Maintaining consistent data formatting\n4. Returning data in a standardized JSON format\n\nYour expertise allows you to navigate complex billing structures, identify relevant information quickly, and standardize data in various utility bill formats. You are meticulous in following instructions and maintaining data integrity throughout the extraction and formatting process.",
-                                messages=[
-                                    {
-                                        "role": "user",
-                                        "content": message_content
-                                    }
-                                ]
-                            )
-
-                            # Parse response - handle direct JSON response
-                            try:
-                                # First try to parse as a complete response format
-                                response_data = json.loads(message.content[0].text)
-                                
-                                # Check if it's already in the right format
-                                if isinstance(response_data, dict):
-                                    response_data['filename'] = pdf_file.name
-                                    individual_results.append(response_data)
-                                # If it's in the fields/bills format
-                                elif response_data.get('bills') and len(response_data['bills']) > 0:
-                                    bill_dict = dict(zip(response_data['fields'], response_data['bills'][0]))
-                                    bill_dict['filename'] = pdf_file.name
-                                    individual_results.append(bill_dict)
-
-                                # Update logging to handle both formats
-                                log_data = {
-                                    "parsed_response": response_data,
-                                    "raw_response": message.model_dump(),
-                                    "file_processed": pdf_file.name,
-                                }
-
-                                # Add format-specific logging data
-                                if isinstance(response_data, dict):
-                                    log_data.update({
-                                        "num_bills_returned": 1,
-                                        "fields_returned": list(response_data.keys())
-                                    })
-                                else:
-                                    log_data.update({
-                                        "num_bills_returned": len(response_data.get("bills", [])),
-                                        "fields_returned": response_data.get("fields", [])
-                                    })
-
-                                # Log successful API call
-                                st.session_state.api_logs.append(
-                                    log_api_call(pdf_file, log_data)
-                                )
-
-                            except json.JSONDecodeError as e:
-                                st.error(f"Error parsing response for {pdf_file.name}: {str(e)}")
-                                continue
-
-                        except Exception as e:
-                            # Log failed API call
-                            st.session_state.api_logs.append(
-                                log_api_call(pdf_file, None, str(e))
-                            )
-                            st.error(f"Error processing {pdf_file.name}: {str(e)}")
-                            continue
-
-                    # Create DataFrame from individual results
                     if individual_results:
                         df = pd.DataFrame(individual_results)
                         columns = ['filename'] + [col for col in df.columns if col != 'filename']
                         df = df[columns]
                         st.session_state.results_df = df
-                        
-                        status_container.success(f"Successfully processed {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''}!")
                     else:
-                        status_container.error("No data was successfully extracted from the files.")
+                        st.error("No data was successfully extracted from the files.")
 
                 except Exception as e:
-                    status_container.error(f"Error processing files: {str(e)}")
+                    st.error(f"Error processing files: {str(e)}")
 
-        # Debug tab content
-        with debug_tab:
-            # Create sections using expanders
-            with st.expander("📤 API Call Preview", expanded=True):
-                st.write("Preview the API call that will be sent when processing files")
+    # Debug tab content
+    with debug_tab:
+        # Create sections using expanders
+        with st.expander("📤 API Call Preview", expanded=True):
+            st.write("Preview the API call that will be sent when processing files")
+            
+            if uploaded_files:
+                col1, col2 = st.columns([1, 1])
                 
-                if uploaded_files:
-                    col1, col2 = st.columns([1, 1])
-                    
-                    # Create buttons side by side but keep display area unified
-                    preview_clicked = col1.button("Generate API Call Preview")
-                    count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
-                    
-                    if preview_clicked or count_tokens_clicked:
-                        # If token counting was requested, show it first
-                        if count_tokens_clicked:
-                            try:
-                                token_count = count_tokens(client, prompt, include_calculations)
-                                st.success("Token Count Results:")
-                                # Print the full response for debugging
-                                print("Token count response:", token_count)
-                                st.json(token_count)  # Show the full response
-                                st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
-                            except Exception as e:
-                                st.error(f"Error counting tokens: {str(e)}")
-                                st.error("Please check the API documentation or try again later.")
+                # Create buttons side by side but keep display area unified
+                preview_clicked = col1.button("Generate API Call Preview")
+                count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
+                
+                if preview_clicked or count_tokens_clicked:
+                    # If token counting was requested, show it first
+                    if count_tokens_clicked:
+                        try:
+                            token_count = count_tokens(client, prompt, include_calculations)
+                            st.success("Token Count Results:")
+                            # Print the full response for debugging
+                            print("Token count response:", token_count)
+                            st.json(token_count)  # Show the full response
+                            st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                        except Exception as e:
+                            st.error(f"Error counting tokens: {str(e)}")
+                            st.error("Please check the API documentation or try again later.")
                             
-                            # Add a visual separator
-                            st.markdown("---")
-                        
-                        # Show the API preview (same for both buttons)
-                        preview = preview_api_call(uploaded_files, prompt, include_calculations)
-                        st.session_state.api_preview = preview
-                        st.json(preview)
-                else:
-                    st.info("Upload files in the main tab to preview the API call")
-            
-            with st.expander("📊 Last API Call Statistics", expanded=False):
-                if hasattr(st.session_state, 'last_usage'):
-                    st.write("Last API Call Statistics:")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
-                    with col2:
-                        st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
-                    
-                    # Add stop reason explanation
-                    stop_reason = st.session_state.last_usage['stop_reason']
-                    explanation = {
-                        "end_turn": "The model completed its response naturally.",
-                        "max_tokens": "The response was cut off due to reaching the token limit.",
-                        "stop_sequence": "The model stopped at a designated stop sequence.",
-                        "error": "The response was terminated due to an error."
-                    }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
-                    
-                    st.write("**Stop Reason:**")
-                    st.info(explanation)
-                else:
-                    st.write("No API calls made yet.")
-            
-            with st.expander("📝 Raw JSON Response", expanded=False):
-                if hasattr(st.session_state, 'raw_json_response'):
-                    st.write("Raw JSON Response from last API call:")
-                    st.code(st.session_state.raw_json_response, language='json')
-                else:
-                    st.write("No API response data available yet.")
-
-            with st.expander("📋 API Call Logs", expanded=True):
-                if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
-                    for log in st.session_state.api_logs:
-                        st.markdown(f"### File: {log['file_processed']}")
-                        st.markdown("**Timestamp:**")
-                        st.write(log['timestamp'])
-                        
-                        if log['error']:
-                            st.error(f"**Error:** {log['error']}")
-                        else:
-                            st.markdown("**Number of Bills Returned:**")
-                            st.write(log['response']['num_bills_returned'])
-                            st.markdown("**Fields Returned:**")
-                            st.write(log['response']['fields_returned'])
-                            
-                            # Use tabs instead of nested expanders
-                            raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
-                            
-                            with raw_tab:
-                                st.json(log['response']['raw_response'])
-                            
-                            with parsed_tab:
-                                st.json(log['response']['parsed_response'])
-                            
-                        # Add a visual separator between files
+                        # Add a visual separator
                         st.markdown("---")
-                else:
-                    st.info("No API calls logged yet.")
+                    
+                    # Show the API preview (same for both buttons)
+                    preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                    st.session_state.api_preview = preview
+                    st.json(preview)
+            else:
+                st.info("Upload files in the main tab to preview the API call")
+        
+        with st.expander("📊 Last API Call Statistics", expanded=False):
+            if hasattr(st.session_state, 'last_usage'):
+                st.write("Last API Call Statistics:")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
+                with col2:
+                    st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
+                
+                # Add stop reason explanation
+                stop_reason = st.session_state.last_usage['stop_reason']
+                explanation = {
+                    "end_turn": "The model completed its response naturally.",
+                    "max_tokens": "The response was cut off due to reaching the token limit.",
+                    "stop_sequence": "The model stopped at a designated stop sequence.",
+                    "error": "The response was terminated due to an error."
+                }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
+                
+                st.write("**Stop Reason:**")
+                st.info(explanation)
+            else:
+                st.write("No API calls made yet.")
+        
+        with st.expander("📝 Raw JSON Response", expanded=False):
+            if hasattr(st.session_state, 'raw_json_response'):
+                st.write("Raw JSON Response from last API call:")
+                st.code(st.session_state.raw_json_response, language='json')
+            else:
+                st.write("No API response data available yet.")
 
-            with st.expander("⚠️ Problematic Files", expanded=True):
-                if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
-                    for file_log in st.session_state.problematic_files:
-                        st.markdown(f"### File: {file_log['filename']}")
-                        st.markdown("**Response data:**")
-                        st.json(file_log['response'])
-                        st.markdown("---")
-                else:
-                    st.info("No problematic files detected in the last processing run.")
+        with st.expander("📋 API Call Logs", expanded=True):
+            if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
+                for log in st.session_state.api_logs:
+                    st.markdown(f"### File: {log['file_processed']}")
+                    st.markdown("**Timestamp:**")
+                    st.write(log['timestamp'])
+                    
+                    if log['error']:
+                        st.error(f"**Error:** {log['error']}")
+                    else:
+                        st.markdown("**Number of Bills Returned:**")
+                        st.write(log['response']['num_bills_returned'])
+                        st.markdown("**Fields Returned:**")
+                        st.write(log['response']['fields_returned'])
+                        
+                        # Use tabs instead of nested expanders
+                        raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
+                        
+                        with raw_tab:
+                            st.json(log['response']['raw_response'])
+                        
+                        with parsed_tab:
+                            st.json(log['response']['parsed_response'])
+                        
+                    # Add a visual separator between files
+                    st.markdown("---")
+            else:
+                st.info("No API calls logged yet.")
+
+        with st.expander("⚠️ Problematic Files", expanded=True):
+            if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
+                for file_log in st.session_state.problematic_files:
+                    st.markdown(f"### File: {file_log['filename']}")
+                    st.markdown("**Response data:**")
+                    st.json(file_log['response'])
+                    st.markdown("---")
+            else:
+                st.info("No problematic files detected in the last processing run.")
 
     # Move Excel creation and download button outside the Process Bills button block
     if hasattr(st.session_state, 'results_df'):
