@@ -408,74 +408,121 @@ def get_grid_columns(zoom_percent):
 
 def show_fullscreen_preview(pdf_file, page_count):
     """Show fullscreen preview with page selection and grouping."""
-    st.markdown("### PDF Preview and Page Selection")
+    # Hide the main page's default elements
+    st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
     
-    # Back button
-    if st.button("← Back to Overview"):
-        st.session_state.current_pdf = None
-        st.rerun()
+    # Custom CSS to make it truly fullscreen
+    st.markdown("""
+        <style>
+        .block-container {
+            padding-top: 1rem;
+            padding-bottom: 0rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        section[data-testid="stSidebar"] {
+            width: 0px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    # Zoom controls
-    col1, col2, col3 = st.columns([2, 6, 2])
+    # Header with back button
+    col1, col2 = st.columns([1, 11])
     with col1:
-        if st.button("🔍 Zoom Out", key=f"zoom_out_{pdf_file.name}"):
-            st.session_state.zoom_level = max(25, st.session_state.zoom_level - 25)
+        if st.button("← Back", use_container_width=True):
+            st.session_state.current_pdf = None
             st.rerun()
     with col2:
+        st.header(f"PDF Preview: {pdf_file.name}")
+    
+    # Zoom controls in a more compact layout
+    zoom_col1, zoom_col2, zoom_col3, *_ = st.columns([1, 8, 1, 2])
+    with zoom_col1:
+        if st.button("🔍-", use_container_width=True):
+            st.session_state.zoom_level = max(25, st.session_state.zoom_level - 25)
+            st.rerun()
+    with zoom_col2:
         st.slider("Zoom Level", 25, 200, st.session_state.zoom_level, 25, 
                  key=f"zoom_slider_{pdf_file.name}",
                  on_change=lambda: setattr(st.session_state, 'zoom_level', 
                                          st.session_state[f"zoom_slider_{pdf_file.name}"]))
-    with col3:
-        if st.button("🔍 Zoom In", key=f"zoom_in_{pdf_file.name}"):
+    with zoom_col3:
+        if st.button("🔍+", use_container_width=True):
             st.session_state.zoom_level = min(200, st.session_state.zoom_level + 25)
             st.rerun()
-    
-    # Dynamic grid layout
-    cols_per_row = get_grid_columns(st.session_state.zoom_level)
     
     # Initialize selected pages if needed
     if f"{pdf_file.name}_selected_pages" not in st.session_state:
         st.session_state[f"{pdf_file.name}_selected_pages"] = set()
     
-    # Display pages in grid
-    for i in range(0, page_count, cols_per_row):
-        cols = st.columns(cols_per_row)
-        for j, col in enumerate(cols):
-            page_idx = i + j
-            if page_idx < page_count:
-                with col:
-                    preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
-                    st.image(preview, use_column_width=True)
-                    
-                    # Page selection
-                    if st.checkbox(f"Select Page {page_idx + 1}", 
-                                 value=page_idx in st.session_state[f"{pdf_file.name}_selected_pages"],
-                                 key=f"select_{pdf_file.name}_{page_idx}"):
-                        st.session_state[f"{pdf_file.name}_selected_pages"].add(page_idx)
-                    else:
-                        st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
+    # Dynamic grid layout
+    cols_per_row = get_grid_columns(st.session_state.zoom_level)
     
-    # Group creation interface
-    st.markdown("### Create Group")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        group_name = st.text_input("Group Name (optional)", key=f"group_name_{pdf_file.name}")
-    with col2:
-        if st.button("Create Group", key=f"create_group_{pdf_file.name}"):
-            selected_pages = sorted(list(st.session_state[f"{pdf_file.name}_selected_pages"]))
-            if selected_pages:
-                if pdf_file.name not in st.session_state.pdf_groups:
-                    st.session_state.pdf_groups[pdf_file.name] = []
-                group = {
-                    "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
-                    "pages": selected_pages
-                }
-                st.session_state.pdf_groups[pdf_file.name].append(group)
-                st.session_state[f"{pdf_file.name}_selected_pages"] = set()
-                st.success(f"Group '{group['name']}' created with {len(selected_pages)} pages")
-            else:
-                st.warning("Please select at least one page to create a group")
+    # Create a container for the grid to enable scrolling
+    grid_container = st.container()
+    with grid_container:
+        # Display pages in grid
+        for i in range(0, page_count, cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, col in enumerate(cols):
+                page_idx = i + j
+                if page_idx < page_count:
+                    with col:
+                        # Page number and checkbox in one row
+                        subcol1, subcol2 = st.columns([3, 1])
+                        with subcol1:
+                            st.write(f"**Page {page_idx + 1}**")
+                        with subcol2:
+                            if st.checkbox("", value=page_idx in st.session_state[f"{pdf_file.name}_selected_pages"],
+                                         key=f"select_{pdf_file.name}_{page_idx}"):
+                                st.session_state[f"{pdf_file.name}_selected_pages"].add(page_idx)
+                            else:
+                                st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
+                        
+                        # Page preview
+                        preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
+                        st.image(preview, use_column_width=True)
+    
+    # Fixed bottom bar for group creation
+    st.markdown("""
+        <style>
+        .stButton button {
+            height: 40px;
+        }
+        div[data-testid="stHorizontalBlock"] > div {
+            display: flex;
+            align-items: center;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    with st.container():
+        st.markdown("---")
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            group_name = st.text_input("Group Name (optional)", 
+                                     key=f"group_name_{pdf_file.name}",
+                                     label_visibility="collapsed",
+                                     placeholder="Enter group name (optional)")
+        with col2:
+            selected_count = len(st.session_state[f"{pdf_file.name}_selected_pages"])
+            st.write(f"Selected: {selected_count} page{'s' if selected_count != 1 else ''}")
+        with col3:
+            if st.button("Create Group", key=f"create_group_{pdf_file.name}", use_container_width=True):
+                selected_pages = sorted(list(st.session_state[f"{pdf_file.name}_selected_pages"]))
+                if selected_pages:
+                    if pdf_file.name not in st.session_state.pdf_groups:
+                        st.session_state.pdf_groups[pdf_file.name] = []
+                    group = {
+                        "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
+                        "pages": selected_pages
+                    }
+                    st.session_state.pdf_groups[pdf_file.name].append(group)
+                    st.session_state[f"{pdf_file.name}_selected_pages"] = set()
+                    st.success(f"Group '{group['name']}' created with {len(selected_pages)} pages")
+                    st.rerun()
+                else:
+                    st.warning("Please select at least one page to create a group")
 
 def manage_pdf_groups(uploaded_files):
     """Manage PDF groups in the UI with fullscreen preview."""
