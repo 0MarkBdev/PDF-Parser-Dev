@@ -6,6 +6,11 @@ import json
 from typing import Any
 import math
 from datetime import datetime
+import fitz  # PyMuPDF for PDF handling
+import tempfile
+import os
+from PIL import Image
+import io
 
 TEMPLATES = {
     "Water Bills": [
@@ -345,13 +350,205 @@ def log_api_call(file: Any, response: Any, error: str = None) -> dict:
         "error": error
     }
 
+def create_pdf_from_pages(input_pdf_path, page_numbers, output_path):
+    """Create a new PDF from selected pages of the input PDF"""
+    doc = fitz.open(input_pdf_path)
+    new_doc = fitz.open()
+    
+    for page_num in page_numbers:
+        new_doc.insert_pdf(doc, from_page=page_num-1, to_page=page_num-1)
+    
+    new_doc.save(output_path)
+    new_doc.close()
+    doc.close()
+
+def get_pdf_preview(pdf_path, page_num, zoom=1.0):
+    """Get a preview image of a PDF page"""
+    doc = fitz.open(pdf_path)
+    page = doc[page_num-1]
+    
+    # Get the page's dimensions
+    rect = page.rect
+    
+    # Calculate zoom matrix
+    mat = fitz.Matrix(zoom * 2, zoom * 2)  # Multiply by 2 for better resolution
+    pix = page.get_pixmap(matrix=mat)
+    
+    # Convert to PIL Image
+    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    
+    # Convert to bytes for Streamlit
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr = img_byte_arr.getvalue()
+    
+    doc.close()
+    return img_byte_arr
+
+def pdf_splitting_page():
+    """Render the PDF splitting page"""
+    st.title("PDF Splitting")
+    st.subheader("Split PDFs by selecting specific pages")
+    
+    # Initialize session state for storing created PDFs
+    if 'created_pdfs' not in st.session_state:
+        st.session_state.created_pdfs = []
+    if 'current_pdf' not in st.session_state:
+        st.session_state.current_pdf = None
+    if 'zoom_level' not in st.session_state:
+        st.session_state.zoom_level = 100
+    if 'selected_pages' not in st.session_state:
+        st.session_state.selected_pages = set()
+    
+    # File upload area
+    uploaded_file = st.file_uploader("Upload PDF", type=['pdf'], key="pdf_splitter")
+    
+    if uploaded_file:
+        # Save the uploaded file to a temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            temp_path = tmp_file.name
+        
+        # Store the current PDF info
+        if st.session_state.current_pdf != temp_path:
+            st.session_state.current_pdf = temp_path
+            st.session_state.selected_pages = set()
+        
+        # Open the PDF and get total pages
+        doc = fitz.open(temp_path)
+        total_pages = len(doc)
+        st.write(f"Total pages: {total_pages}")
+        
+        # Zoom controls
+        st.write("Zoom Control")
+        zoom_col1, zoom_col2, zoom_col3, zoom_col4 = st.columns([1, 6, 2, 1])
+        
+        with zoom_col1:
+            if st.button("-"):
+                st.session_state.zoom_level = max(50, st.session_state.zoom_level - 25)
+        
+        with zoom_col2:
+            st.session_state.zoom_level = st.slider("", 50, 300, st.session_state.zoom_level, 25)
+        
+        with zoom_col3:
+            st.session_state.zoom_level = int(st.text_input("", value=st.session_state.zoom_level, key="zoom_input"))
+        
+        with zoom_col4:
+            if st.button("+"):
+                st.session_state.zoom_level = min(300, st.session_state.zoom_level + 25)
+        
+        # Calculate columns based on zoom level
+        zoom = st.session_state.zoom_level / 100
+        if zoom <= 0.74:
+            cols_per_row = 5
+        elif zoom <= 0.99:
+            cols_per_row = 4
+        elif zoom <= 1.49:
+            cols_per_row = 3
+        elif zoom <= 1.99:
+            cols_per_row = 2
+        else:
+            cols_per_row = 1
+        
+        # Create grid of previews
+        for i in range(0, total_pages, cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j in range(cols_per_row):
+                if i + j < total_pages:
+                    page_num = i + j + 1
+                    with cols[j]:
+                        # Page preview
+                        preview = get_pdf_preview(temp_path, page_num, zoom)
+                        st.image(preview, use_column_width=True)
+                        
+                        # Checkbox and page number
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            if st.checkbox("", key=f"page_{page_num}", 
+                                         value=page_num in st.session_state.selected_pages):
+                                st.session_state.selected_pages.add(page_num)
+                            else:
+                                st.session_state.selected_pages.discard(page_num)
+                        with col2:
+                            st.write(f"Page {page_num}")
+        
+        # Create PDF section
+        st.write("---")
+        st.write("### Create New PDF")
+        
+        if not st.session_state.selected_pages:
+            st.warning("No pages selected")
+        else:
+            st.write(f"Selected pages: {sorted(list(st.session_state.selected_pages))}")
+            
+            if st.button("Create PDF", disabled=len(st.session_state.selected_pages) == 0):
+                # Generate filename
+                selected_pages_str = ','.join(map(str, sorted(st.session_state.selected_pages)))
+                new_filename = f"split_{selected_pages_str}_{uploaded_file.name}"
+                output_path = os.path.join(tempfile.gettempdir(), new_filename)
+                
+                # Create the PDF
+                create_pdf_from_pages(temp_path, sorted(list(st.session_state.selected_pages)), output_path)
+                
+                # Add to created PDFs list
+                st.session_state.created_pdfs.append({
+                    'path': output_path,
+                    'filename': new_filename
+                })
+                
+                # Clear selection
+                st.session_state.selected_pages = set()
+                st.rerun()
+        
+        # List of created PDFs
+        if st.session_state.created_pdfs:
+            st.write("---")
+            st.write("### Created PDFs")
+            
+            for pdf in st.session_state.created_pdfs:
+                col1, col2, col3, col4 = st.columns([1, 6, 2, 2])
+                
+                with col1:
+                    st.write("📄")
+                with col2:
+                    st.write(pdf['filename'])
+                with col3:
+                    if st.button("Delete", key=f"del_{pdf['filename']}"):
+                        try:
+                            os.remove(pdf['path'])
+                            st.session_state.created_pdfs.remove(pdf)
+                            st.rerun()
+                        except:
+                            st.error("Failed to delete file")
+                with col4:
+                    if st.button("Send to Parser", key=f"parse_{pdf['filename']}"):
+                        if 'uploaded_files' not in st.session_state:
+                            st.session_state.uploaded_files = []
+                        
+                        # Add the file to the main parser's uploaded files
+                        with open(pdf['path'], 'rb') as f:
+                            file_bytes = f.read()
+                            st.session_state.uploaded_files.append({
+                                'name': pdf['filename'],
+                                'type': 'application/pdf',
+                                'bytes': file_bytes
+                            })
+                        st.success(f"Added {pdf['filename']} to parser queue")
+        
+        # Cleanup temporary file
+        doc.close()
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+
 # Main app
 def main():
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
-    # Create tabs for main content and debug info
-    main_tab, debug_tab = st.tabs(["Main", "Debug Info"])
+    # Create tabs for main content, PDF splitting, and debug info
+    main_tab, split_tab, debug_tab = st.tabs(["Main", "PDF Splitting", "Debug Info"])
 
     with main_tab:
         # Create the interface

@@ -2,3 +2,5 @@ streamlit
 pandas
 anthropic
 openpyxl
+PyMuPDF==1.23.8
+Pillow==10.2.0
