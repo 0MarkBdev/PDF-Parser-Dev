@@ -418,6 +418,19 @@ def show_fullscreen_preview(pdf_file, page_count):
         st.session_state.current_pdf = None
         st.rerun()
     
+    # Show existing groups at the top
+    if st.session_state.pdf_groups.get(pdf_file.name):
+        st.markdown("### Existing Groups")
+        for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"**{group['name']}**: Pages {[p+1 for p in group['pages']]}")
+            with col2:
+                if st.button("Delete", key=f"delete_group_{pdf_file.name}_{i}"):
+                    st.session_state.pdf_groups[pdf_file.name].pop(i)
+                    st.rerun()
+        st.markdown("---")
+    
     # Zoom controls with increased range
     col1, col2, col3 = st.columns([2, 6, 2])
     with col1:
@@ -448,19 +461,27 @@ def show_fullscreen_preview(pdf_file, page_count):
             page_idx = i + j
             if page_idx < page_count:
                 with col:
-                    preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
-                    st.image(preview, use_column_width=True)
-                    
-                    # Page selection - moved below image for better layout
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        page_label = f"Page {page_idx + 1}"
-                        if cols_per_row == 1:  # Add more details in single-page view
-                            st.markdown(f"### {page_label}")
-                    with col2:
-                        if st.checkbox("Select", 
-                                     value=page_idx in st.session_state[f"{pdf_file.name}_selected_pages"],
-                                     key=f"select_{pdf_file.name}_{page_idx}"):
+                    # Container for each page
+                    with st.container():
+                        # Page number and selection in one row
+                        select_col1, select_col2 = st.columns([3, 1])
+                        with select_col1:
+                            page_label = f"Page {page_idx + 1}"
+                            if cols_per_row == 1:  # Add more details in single-page view
+                                st.markdown(f"### {page_label}")
+                            else:
+                                st.write(page_label)
+                        with select_col2:
+                            is_selected = st.checkbox("Select", 
+                                                    value=page_idx in st.session_state[f"{pdf_file.name}_selected_pages"],
+                                                    key=f"select_{pdf_file.name}_{page_idx}")
+                        
+                        # Page preview below selection controls
+                        preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
+                        st.image(preview, use_column_width=True)
+                        
+                        # Update selection state
+                        if is_selected:
                             st.session_state[f"{pdf_file.name}_selected_pages"].add(page_idx)
                         else:
                             st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
