@@ -6,11 +6,19 @@ import json
 from typing import Any
 import math
 from datetime import datetime
-import fitz  # PyMuPDF for PDF handling
+try:
+    import fitz  # PyMuPDF
+except ImportError:
+    st.error("Error: PyMuPDF (fitz) is not installed. Please make sure it's listed in requirements.txt and the app is redeployed.")
+    fitz = None
+try:
+    from PIL import Image
+except ImportError:
+    st.error("Error: Pillow is not installed. Please make sure it's listed in requirements.txt and the app is redeployed.")
+    Image = None
+import io
 import tempfile
 import os
-from PIL import Image
-import io
 
 TEMPLATES = {
     "Water Bills": [
@@ -390,6 +398,11 @@ def pdf_splitting_page():
     st.title("PDF Splitting")
     st.subheader("Split PDFs by selecting specific pages")
     
+    # Check if required dependencies are available
+    if fitz is None or Image is None:
+        st.error("Required dependencies (PyMuPDF or Pillow) are not available. Please check the app logs and make sure all dependencies are properly installed.")
+        return
+    
     # Initialize session state for storing created PDFs
     if 'created_pdfs' not in st.session_state:
         st.session_state.created_pdfs = []
@@ -404,143 +417,146 @@ def pdf_splitting_page():
     uploaded_file = st.file_uploader("Upload PDF", type=['pdf'], key="pdf_splitter")
     
     if uploaded_file:
-        # Save the uploaded file to a temporary location
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            temp_path = tmp_file.name
-        
-        # Store the current PDF info
-        if st.session_state.current_pdf != temp_path:
-            st.session_state.current_pdf = temp_path
-            st.session_state.selected_pages = set()
-        
-        # Open the PDF and get total pages
-        doc = fitz.open(temp_path)
-        total_pages = len(doc)
-        st.write(f"Total pages: {total_pages}")
-        
-        # Zoom controls
-        st.write("Zoom Control")
-        zoom_col1, zoom_col2, zoom_col3, zoom_col4 = st.columns([1, 6, 2, 1])
-        
-        with zoom_col1:
-            if st.button("-"):
-                st.session_state.zoom_level = max(50, st.session_state.zoom_level - 25)
-        
-        with zoom_col2:
-            st.session_state.zoom_level = st.slider("", 50, 300, st.session_state.zoom_level, 25)
-        
-        with zoom_col3:
-            st.session_state.zoom_level = int(st.text_input("", value=st.session_state.zoom_level, key="zoom_input"))
-        
-        with zoom_col4:
-            if st.button("+"):
-                st.session_state.zoom_level = min(300, st.session_state.zoom_level + 25)
-        
-        # Calculate columns based on zoom level
-        zoom = st.session_state.zoom_level / 100
-        if zoom <= 0.74:
-            cols_per_row = 5
-        elif zoom <= 0.99:
-            cols_per_row = 4
-        elif zoom <= 1.49:
-            cols_per_row = 3
-        elif zoom <= 1.99:
-            cols_per_row = 2
-        else:
-            cols_per_row = 1
-        
-        # Create grid of previews
-        for i in range(0, total_pages, cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j in range(cols_per_row):
-                if i + j < total_pages:
-                    page_num = i + j + 1
-                    with cols[j]:
-                        # Page preview
-                        preview = get_pdf_preview(temp_path, page_num, zoom)
-                        st.image(preview, use_column_width=True)
-                        
-                        # Checkbox and page number
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            if st.checkbox("", key=f"page_{page_num}", 
-                                         value=page_num in st.session_state.selected_pages):
-                                st.session_state.selected_pages.add(page_num)
-                            else:
-                                st.session_state.selected_pages.discard(page_num)
-                        with col2:
-                            st.write(f"Page {page_num}")
-        
-        # Create PDF section
-        st.write("---")
-        st.write("### Create New PDF")
-        
-        if not st.session_state.selected_pages:
-            st.warning("No pages selected")
-        else:
-            st.write(f"Selected pages: {sorted(list(st.session_state.selected_pages))}")
-            
-            if st.button("Create PDF", disabled=len(st.session_state.selected_pages) == 0):
-                # Generate filename
-                selected_pages_str = ','.join(map(str, sorted(st.session_state.selected_pages)))
-                new_filename = f"split_{selected_pages_str}_{uploaded_file.name}"
-                output_path = os.path.join(tempfile.gettempdir(), new_filename)
-                
-                # Create the PDF
-                create_pdf_from_pages(temp_path, sorted(list(st.session_state.selected_pages)), output_path)
-                
-                # Add to created PDFs list
-                st.session_state.created_pdfs.append({
-                    'path': output_path,
-                    'filename': new_filename
-                })
-                
-                # Clear selection
-                st.session_state.selected_pages = set()
-                st.rerun()
-        
-        # List of created PDFs
-        if st.session_state.created_pdfs:
-            st.write("---")
-            st.write("### Created PDFs")
-            
-            for pdf in st.session_state.created_pdfs:
-                col1, col2, col3, col4 = st.columns([1, 6, 2, 2])
-                
-                with col1:
-                    st.write("📄")
-                with col2:
-                    st.write(pdf['filename'])
-                with col3:
-                    if st.button("Delete", key=f"del_{pdf['filename']}"):
-                        try:
-                            os.remove(pdf['path'])
-                            st.session_state.created_pdfs.remove(pdf)
-                            st.rerun()
-                        except:
-                            st.error("Failed to delete file")
-                with col4:
-                    if st.button("Send to Parser", key=f"parse_{pdf['filename']}"):
-                        if 'uploaded_files' not in st.session_state:
-                            st.session_state.uploaded_files = []
-                        
-                        # Add the file to the main parser's uploaded files
-                        with open(pdf['path'], 'rb') as f:
-                            file_bytes = f.read()
-                            st.session_state.uploaded_files.append({
-                                'name': pdf['filename'],
-                                'type': 'application/pdf',
-                                'bytes': file_bytes
-                            })
-                        st.success(f"Added {pdf['filename']} to parser queue")
-        
-        # Cleanup temporary file
-        doc.close()
         try:
-            os.unlink(temp_path)
-        except:
-            pass
+            # Save the uploaded file to a temporary location
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                temp_path = tmp_file.name
+            
+            # Store the current PDF info
+            if st.session_state.current_pdf != temp_path:
+                st.session_state.current_pdf = temp_path
+                st.session_state.selected_pages = set()
+            
+            # Open the PDF and get total pages
+            doc = fitz.open(temp_path)
+            total_pages = len(doc)
+            st.write(f"Total pages: {total_pages}")
+            
+            # Zoom controls
+            st.write("Zoom Control")
+            zoom_col1, zoom_col2, zoom_col3, zoom_col4 = st.columns([1, 6, 2, 1])
+            
+            with zoom_col1:
+                if st.button("-"):
+                    st.session_state.zoom_level = max(50, st.session_state.zoom_level - 25)
+            
+            with zoom_col2:
+                st.session_state.zoom_level = st.slider("", 50, 300, st.session_state.zoom_level, 25)
+            
+            with zoom_col3:
+                st.session_state.zoom_level = int(st.text_input("", value=st.session_state.zoom_level, key="zoom_input"))
+            
+            with zoom_col4:
+                if st.button("+"):
+                    st.session_state.zoom_level = min(300, st.session_state.zoom_level + 25)
+            
+            # Calculate columns based on zoom level
+            zoom = st.session_state.zoom_level / 100
+            if zoom <= 0.74:
+                cols_per_row = 5
+            elif zoom <= 0.99:
+                cols_per_row = 4
+            elif zoom <= 1.49:
+                cols_per_row = 3
+            elif zoom <= 1.99:
+                cols_per_row = 2
+            else:
+                cols_per_row = 1
+            
+            # Create grid of previews
+            for i in range(0, total_pages, cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j in range(cols_per_row):
+                    if i + j < total_pages:
+                        page_num = i + j + 1
+                        with cols[j]:
+                            # Page preview
+                            preview = get_pdf_preview(temp_path, page_num, zoom)
+                            st.image(preview, use_column_width=True)
+                            
+                            # Checkbox and page number
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                if st.checkbox("", key=f"page_{page_num}", 
+                                             value=page_num in st.session_state.selected_pages):
+                                    st.session_state.selected_pages.add(page_num)
+                                else:
+                                    st.session_state.selected_pages.discard(page_num)
+                            with col2:
+                                st.write(f"Page {page_num}")
+            
+            # Create PDF section
+            st.write("---")
+            st.write("### Create New PDF")
+            
+            if not st.session_state.selected_pages:
+                st.warning("No pages selected")
+            else:
+                st.write(f"Selected pages: {sorted(list(st.session_state.selected_pages))}")
+                
+                if st.button("Create PDF", disabled=len(st.session_state.selected_pages) == 0):
+                    # Generate filename
+                    selected_pages_str = ','.join(map(str, sorted(st.session_state.selected_pages)))
+                    new_filename = f"split_{selected_pages_str}_{uploaded_file.name}"
+                    output_path = os.path.join(tempfile.gettempdir(), new_filename)
+                    
+                    # Create the PDF
+                    create_pdf_from_pages(temp_path, sorted(list(st.session_state.selected_pages)), output_path)
+                    
+                    # Add to created PDFs list
+                    st.session_state.created_pdfs.append({
+                        'path': output_path,
+                        'filename': new_filename
+                    })
+                    
+                    # Clear selection
+                    st.session_state.selected_pages = set()
+                    st.rerun()
+            
+            # List of created PDFs
+            if st.session_state.created_pdfs:
+                st.write("---")
+                st.write("### Created PDFs")
+                
+                for pdf in st.session_state.created_pdfs:
+                    col1, col2, col3, col4 = st.columns([1, 6, 2, 2])
+                    
+                    with col1:
+                        st.write("📄")
+                    with col2:
+                        st.write(pdf['filename'])
+                    with col3:
+                        if st.button("Delete", key=f"del_{pdf['filename']}"):
+                            try:
+                                os.remove(pdf['path'])
+                                st.session_state.created_pdfs.remove(pdf)
+                                st.rerun()
+                            except:
+                                st.error("Failed to delete file")
+                    with col4:
+                        if st.button("Send to Parser", key=f"parse_{pdf['filename']}"):
+                            if 'uploaded_files' not in st.session_state:
+                                st.session_state.uploaded_files = []
+                            
+                            # Add the file to the main parser's uploaded files
+                            with open(pdf['path'], 'rb') as f:
+                                file_bytes = f.read()
+                                st.session_state.uploaded_files.append({
+                                    'name': pdf['filename'],
+                                    'type': 'application/pdf',
+                                    'bytes': file_bytes
+                                })
+                            st.success(f"Added {pdf['filename']} to parser queue")
+            
+            # Cleanup temporary file
+            doc.close()
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+        except Exception as e:
+            st.error(f"Error processing {uploaded_file.name}: {str(e)}")
 
 # Main app
 def main():
@@ -835,7 +851,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                 else:
                     st.info("Upload files in the main tab to preview the API call")
             
-            with st.expander("📊 Last API Call Statistics", expanded=False):
+            with st.expander("�� Last API Call Statistics", expanded=False):
                 if hasattr(st.session_state, 'last_usage'):
                     st.write("Last API Call Statistics:")
                     col1, col2 = st.columns(2)
