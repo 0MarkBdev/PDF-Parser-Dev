@@ -447,23 +447,28 @@ def main():
 
             st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
 
+            # Add custom CSS for styling
+            st.markdown("""
+                <style>
+                .stButton > button {
+                    width: 100%;
+                }
+                div[data-testid="stExpander"] {
+                    background-color: #f8f9fa;
+                    border: 1px solid #e9ecef;
+                    border-radius: 0.5em;
+                    margin: 0.5em 0;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+
             # Process each group
             for group_idx, group in enumerate(st.session_state.page_ranges_groups):
-                with st.container():
-                    st.markdown("""
-                        <div class="group-container">
-                    """, unsafe_allow_html=True)
-                    
-                    # Group header
-                    st.markdown(f"""
-                        <div class="group-header">{group['name']}</div>
-                    """, unsafe_allow_html=True)
-                    
+                with st.expander(group['name'], expanded=True):
                     # Allow editing group name
                     new_name = st.text_input("Group Name", 
                                            value=group['name'], 
-                                           key=f"group_name_{group_idx}",
-                                           label_visibility="collapsed")
+                                           key=f"group_name_{group_idx}")
                     group['name'] = new_name
 
                     st.write("Enter page ranges:")
@@ -511,8 +516,6 @@ def main():
                             if st.button("🗑️ Delete Group", key=f"delete_group_{group_idx}", use_container_width=True):
                                 st.session_state.page_ranges_groups.pop(group_idx)
                                 st.rerun()
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)  # Close the group container
 
             st.markdown("<br>", unsafe_allow_html=True)  # Add spacing before the Create PDFs button
 
