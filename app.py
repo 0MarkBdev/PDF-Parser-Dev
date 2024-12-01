@@ -530,8 +530,33 @@ def show_fullscreen_preview(pdf_file, page_count):
                         st.session_state.pdf_groups[pdf_file.name].pop(i)
                         st.rerun()
 
+def get_split_grid_columns(zoom_percent):
+    """Determine number of columns for split PDF view based on zoom level."""
+    if zoom_percent >= 200:  # Single page view
+        return 1
+    if zoom_percent >= 150:  # Two pages view
+        return 2
+    return 3  # Default three pages view
+
 def split_pdf_page():
     """Dedicated page for PDF splitting."""
+    st.markdown("""
+        <style>
+        .split-preview {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .page-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown("## PDF Splitting")
     st.write("Create smaller PDFs from larger documents before processing.")
     
@@ -539,41 +564,85 @@ def split_pdf_page():
     uploaded_file = st.file_uploader("Upload PDF to Split", type=['pdf'], key="split_pdf_uploader")
     
     if uploaded_file:
+        # Initialize session state for split view
+        if 'split_zoom_level' not in st.session_state:
+            st.session_state.split_zoom_level = 100
+        if 'selected_split_pages' not in st.session_state:
+            st.session_state.selected_split_pages = set()
+        
         # Get page count
         page_count = get_pdf_page_count(uploaded_file)
         st.write(f"Total pages: {page_count}")
         
-        # Preview section
-        col1, col2 = st.columns([1, 3])
+        # Zoom controls
+        col1, col2, col3 = st.columns([1, 8, 1])
         with col1:
-            preview_page = st.number_input("Preview page", min_value=1, max_value=page_count, value=1) - 1
+            if st.button("-", key="split_zoom_out"):
+                st.session_state.split_zoom_level = max(50, st.session_state.split_zoom_level - 25)
+                st.rerun()
         with col2:
-            preview = get_page_thumbnail(uploaded_file, preview_page, 100, True)
-            st.image(preview, use_column_width=True)
-        
-        # Split options
-        st.markdown("### Create New PDF")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            start_page = st.number_input("Start Page", min_value=1, max_value=page_count, value=1)
-        with col2:
-            end_page = st.number_input("End Page", min_value=start_page, max_value=page_count, value=min(start_page, page_count))
+            st.slider("Zoom Level", 50, 300, st.session_state.split_zoom_level, 25,
+                     key="split_zoom_slider",
+                     on_change=lambda: setattr(st.session_state, 'split_zoom_level',
+                                             st.session_state.split_zoom_slider))
         with col3:
-            if st.button("Create PDF", type="primary"):
-                # Create new PDF
-                new_pdf = extract_pdf_pages(uploaded_file, range(start_page-1, end_page))
+            if st.button("+", key="split_zoom_in"):
+                st.session_state.split_zoom_level = min(300, st.session_state.split_zoom_level + 25)
+                st.rerun()
+        
+        # Dynamic grid layout
+        cols_per_row = get_split_grid_columns(st.session_state.split_zoom_level)
+        
+        # Display pages in grid
+        for i in range(0, page_count, cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, col in enumerate(cols):
+                page_idx = i + j
+                if page_idx < page_count:
+                    with col:
+                        with st.container():
+                            # Page preview
+                            preview = get_page_thumbnail(uploaded_file, page_idx, st.session_state.split_zoom_level)
+                            st.image(preview, use_column_width=True)
+                            
+                            # Checkbox centered below preview
+                            _, check_col, _ = st.columns([1, 2, 1])
+                            with check_col:
+                                if st.checkbox("Select", value=page_idx in st.session_state.selected_split_pages,
+                                            key=f"split_select_{page_idx}",
+                                            label_visibility="collapsed"):
+                                    st.session_state.selected_split_pages.add(page_idx)
+                                else:
+                                    st.session_state.selected_split_pages.discard(page_idx)
+        
+        # Create PDF controls
+        st.markdown("### Create New PDF")
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            if not st.session_state.selected_split_pages:
+                st.warning("Please select pages to create a new PDF")
+            else:
+                st.write(f"Selected pages: {sorted([p+1 for p in st.session_state.selected_split_pages])}")
+        with col2:
+            if st.button("Create PDF", type="primary", disabled=not st.session_state.selected_split_pages):
+                # Create new PDF from selected pages
+                selected_pages = sorted(list(st.session_state.selected_split_pages))
+                new_pdf = extract_pdf_pages(uploaded_file, selected_pages)
                 
                 # Add to session state for main page
                 if 'split_pdfs' not in st.session_state:
                     st.session_state.split_pdfs = []
                 
                 # Generate unique name
-                new_name = f"Split_{start_page}-{end_page}_{uploaded_file.name}"
+                page_range = f"{selected_pages[0]+1}-{selected_pages[-1]+1}"
+                new_name = f"Split_{page_range}_{uploaded_file.name}"
                 st.session_state.split_pdfs.append({
                     'name': new_name,
                     'content': new_pdf
                 })
-                st.success(f"Created PDF with pages {start_page}-{end_page}")
+                st.success(f"Created PDF with pages {page_range}")
+                st.session_state.selected_split_pages = set()  # Clear selection
+                st.rerun()
         
         # Show created PDFs
         if hasattr(st.session_state, 'split_pdfs') and st.session_state.split_pdfs:
