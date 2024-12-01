@@ -544,9 +544,6 @@ def main():
                         try:
                             os.remove(os.path.join(os.getcwd(), pdf_name))
                             st.session_state.created_pdfs.remove(pdf_name)
-                            # Also remove from split_pdfs_to_parse if present
-                            if pdf_name in st.session_state.split_pdfs_to_parse:
-                                st.session_state.split_pdfs_to_parse.remove(pdf_name)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error deleting file: {str(e)}")
