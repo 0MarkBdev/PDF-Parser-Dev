@@ -363,7 +363,7 @@ def main():
 
     # Initialize session state for PDF splitting
     if 'zoom_level' not in st.session_state:
-        st.session_state.zoom_level = 100
+        st.session_state.zoom_level = 50
     if 'selected_pages' not in st.session_state:
         st.session_state.selected_pages = set()
     if 'created_pdfs' not in st.session_state:
@@ -397,18 +397,14 @@ def main():
             # Display total page count
             st.write(f"Total pages: {st.session_state.page_count}")
 
-            # Zoom controls
-            col1, col2, col3, col4 = st.columns([1, 6, 2, 1])
-            with col1:
-                if st.button("-"):
-                    st.session_state.zoom_level = max(50, st.session_state.zoom_level - 25)
-            with col2:
-                st.session_state.zoom_level = st.slider("Zoom", 50, 300, st.session_state.zoom_level, 25)
-            with col3:
-                st.session_state.zoom_level = st.number_input("", min_value=50, max_value=300, value=st.session_state.zoom_level, label_visibility="collapsed")
-            with col4:
-                if st.button("+"):
-                    st.session_state.zoom_level = min(300, st.session_state.zoom_level + 25)
+            # Simplified zoom control - just a number input with spinbox
+            st.session_state.zoom_level = st.number_input(
+                "Zoom %",
+                min_value=50,
+                max_value=300,
+                value=st.session_state.zoom_level,
+                step=25
+            )
 
             # Calculate grid columns based on zoom level
             if st.session_state.zoom_level < 75:
