@@ -532,26 +532,32 @@ def show_fullscreen_preview(pdf_file, page_count):
 
 def split_pdf_page():
     """Dedicated page for PDF splitting."""
-    # Custom CSS to remove padding and use full width for this page only
+    # Custom CSS to force full width
     st.markdown("""
         <style>
+        /* Override Streamlit's default width restrictions */
+        .appview-container .main .block-container {
+            max-width: unset !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            width: 100% !important;
+        }
+
         /* Remove padding in containers */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
-            padding-left: 0rem;
-            padding-right: 0rem;
+            padding-left: 0rem !important;
+            padding-right: 0rem !important;
         }
         
-        /* Expand main container */
-        .main > .block-container {
-            max-width: 100%;
-            padding-left: 1rem;
-            padding-right: 1rem;
+        /* Ensure content spans full width */
+        .stMarkdown, .stImage, .stButton, .stNumberInput {
+            width: 100% !important;
         }
         
         /* Adjust image display */
         .stImage > img {
-            width: 100%;
-            max-width: none;
+            width: 100% !important;
+            max-width: none !important;
         }
         
         /* Make buttons more prominent */
@@ -560,13 +566,18 @@ def split_pdf_page():
             border-radius: 4px;
             padding: 0.5rem;
         }
+
+        /* Remove any fixed width containers */
+        .css-1d391kg, .css-1a1fmpi {
+            max-width: none !important;
+        }
         </style>
     """, unsafe_allow_html=True)
     
     st.markdown("## PDF Splitting")
     st.write("Create smaller PDFs from larger documents before processing.")
     
-    # File upload
+    # File upload with full width
     uploaded_file = st.file_uploader("Upload PDF to Split", type=['pdf'], key="split_pdf_uploader")
     
     if uploaded_file:
@@ -575,7 +586,7 @@ def split_pdf_page():
         st.write(f"Total pages: {page_count}")
         
         # Preview section with full width
-        preview_col1, preview_col2 = st.columns([1, 4])  # Adjusted ratio for better use of space
+        preview_col1, preview_col2 = st.columns([1, 5])  # Even more space for preview
         with preview_col1:
             preview_page = st.number_input("Preview page", min_value=1, max_value=page_count, value=1) - 1
         with preview_col2:
@@ -584,7 +595,7 @@ def split_pdf_page():
         
         # Split options with better spacing
         st.markdown("### Create New PDF")
-        split_col1, split_col2, split_col3, split_col4 = st.columns([2, 2, 2, 6])  # Better column distribution
+        split_col1, split_col2, split_col3, split_col4 = st.columns([2, 2, 2, 6])
         with split_col1:
             start_page = st.number_input("Start Page", min_value=1, max_value=page_count, value=1)
         with split_col2:
@@ -1118,7 +1129,8 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             max_length = max(
                 df_sorted[col].astype(str).apply(len).max(),
                 len(str(col))
-            )  # Properly close max() function
+            )
+            
             
             # Limit column width to a reasonable maximum (e.g., 50 characters)
             adjusted_width = min(max_length + 2, 50)
