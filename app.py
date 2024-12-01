@@ -97,21 +97,21 @@ CALCULATIONS_EXAMPLES = """<examples>
             {
               "Bill Date": "2024-03-15",
               "Account Number": "AC-12345-B",
-              "Current Meter Reading": 68950,
-              "Previous Meter Reading": 65200,
-              "Total Water Consumption": 3750,
-              "Water Usage Charge": 2.25,
-              "Water Usage Charge_2": 2.75,
-              "Water Usage Charge_3": 3.25,
-              "Water Usage Charge_CalcTotal": 8.25,
-              "Technology Fee": 2.50,
-              "Technology Fee_2": 2.50,
-              "Technology Fee_CalcTotal": 5.00,
-              "Capacity Charge Maximum Demand": 12.50,
-              "Capacity Charge Maximum Demand_2": 12.50,
-              "Capacity Charge Maximum Demand_CalcTotal": 25.00,
+              "Current Meter Reading": "68950",
+              "Previous Meter Reading": "65200",
+              "Total Water Consumption": "3750",
+              "Water Usage Charge": "2.25",
+              "Water Usage Charge_2": "2.75",
+              "Water Usage Charge_3": "3.25",
+              "Water Usage Charge_CalcTotal": "8.25",
+              "Technology Fee": "2.50",
+              "Technology Fee_2": "2.50",
+              "Technology Fee_CalcTotal": "5.00",
+              "Capacity Charge Maximum Demand": "12.50",
+              "Capacity Charge Maximum Demand_2": "12.50",
+              "Capacity Charge Maximum Demand_CalcTotal": "25.00",
               "Reactive Power Charge": null,
-              "Total Current Charges": 46.50
+              "Total Current Charges": "46.50"
             }
         </ideal_output>
     </example>
@@ -166,14 +166,14 @@ SIMPLE_EXAMPLES = """<examples>
             {
               "Bill Date": "2024-03-15",
               "Account Number": "AC-12345-B",
-              "Current Meter Reading": 68950,
-              "Previous Meter Reading": 65200,
-              "Total Water Consumption": 3750,
-              "Water Usage Charge_CalcTotal": 8.25,
-              "Technology Fee_CalcTotal": 5.00,
-              "Capacity Charge Maximum Demand_CalcTotal": 25.00,
+              "Current Meter Reading": "68950",
+              "Previous Meter Reading": "65200",
+              "Total Water Consumption": "3750",
+              "Water Usage Charge_CalcTotal": "8.25",
+              "Technology Fee_CalcTotal": "5.00",
+              "Capacity Charge Maximum Demand_CalcTotal": "25.00",
               "Reactive Power Charge": null,
-              "Total Current Charges": 46.50
+              "Total Current Charges": "46.50"
             }
         </ideal_output>
     </example>
@@ -243,6 +243,10 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
     
     pdf_file = uploaded_files[0]
     
+    # Actually encode the PDF content for the preview
+    pdf_base64 = base64.b64encode(pdf_file.read()).decode()
+    pdf_file.seek(0)  # Reset file pointer after reading
+    
     # Prepare message content for single PDF
     message_content = [
         {
@@ -250,7 +254,7 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
             "source": {
                 "type": "base64",
                 "media_type": "application/pdf",
-                "data": f"[Base64 encoded content of {pdf_file.name}]"  # Placeholder
+                "data": pdf_base64  # Use actual encoded content instead of placeholder
             }
         },
         {
@@ -1118,7 +1122,13 @@ Provide ONLY the JSON object as your final output, with no additional text."""
         with st.expander("📝 Raw JSON Response", expanded=False):
             if hasattr(st.session_state, 'raw_json_response'):
                 st.write("Raw JSON Response from last API call:")
-                st.code(st.session_state.raw_json_response, language='json')
+                # Parse the JSON string and then format it nicely
+                try:
+                    formatted_json = json.dumps(json.loads(st.session_state.raw_json_response), indent=2)
+                    st.code(formatted_json, language='json')
+                except json.JSONDecodeError:
+                    # Fallback to raw display if JSON parsing fails
+                    st.code(st.session_state.raw_json_response, language='json')
             else:
                 st.write("No API response data available yet.")
 
