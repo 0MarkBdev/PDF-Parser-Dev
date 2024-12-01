@@ -447,75 +447,89 @@ def main():
 
             st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
 
-            # Add custom CSS for styling
+            # Add custom CSS for styling with dark mode support
             st.markdown("""
                 <style>
                 .stButton > button {
                     width: 100%;
                 }
                 div[data-testid="stExpander"] {
-                    background-color: #f8f9fa;
-                    border: 1px solid #e9ecef;
+                    background-color: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(250, 250, 250, 0.1);
                     border-radius: 0.5em;
                     margin: 0.5em 0;
+                }
+                /* Dark mode specific styles */
+                [data-testid="stAppViewContainer"] [data-testid="stExpander"] {
+                    background-color: rgba(255, 255, 255, 0.05);
+                }
+                [data-testid="stAppViewContainer"] [data-testid="stExpander"] > div[role="button"] {
+                    color: rgb(250, 250, 250);
+                }
+                [data-testid="stAppViewContainer"] [data-testid="stExpander"] > div[role="button"]:hover {
+                    color: rgb(180, 180, 180);
                 }
                 </style>
             """, unsafe_allow_html=True)
 
-            # Process each group
-            for group_idx, group in enumerate(st.session_state.page_ranges_groups):
-                with st.expander(group['name'], expanded=True):
-                    # Allow editing group name
-                    new_name = st.text_input("Group Name", 
-                                           value=group['name'], 
-                                           key=f"group_name_{group_idx}")
-                    group['name'] = new_name
+            try:
+                # Process each group
+                for group_idx, group in enumerate(st.session_state.page_ranges_groups):
+                    with st.expander(group['name'], expanded=True):
+                        # Allow editing group name
+                        new_name = st.text_input("Group Name", 
+                                               value=group['name'], 
+                                               key=f"group_name_{group_idx}")
+                        group['name'] = new_name
 
-                    st.write("Enter page ranges:")
-                    
-                    # Display existing ranges for this group
-                    new_ranges = []
-                    for i, (start, end) in enumerate(group['ranges']):
-                        col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+                        st.write("Enter page ranges:")
                         
-                        with col1:
-                            new_start = st.text_input("Start Page", 
-                                                    value=start, 
-                                                    key=f"start_range_{group_idx}_{i}", 
-                                                    placeholder="e.g., 1")
-                        with col2:
-                            new_end = st.text_input("End Page", 
-                                                  value=end, 
-                                                  key=f"end_range_{group_idx}_{i}", 
-                                                  placeholder=f"e.g., {st.session_state.page_count}")
-                        with col3:
-                            if st.button("✕", key=f"remove_range_btn_{group_idx}_{i}"):
-                                continue
-                        with col4:
-                            if i > 0 and st.button("↑", key=f"move_up_range_btn_{group_idx}_{i}"):
-                                if i > 0:
-                                    new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
-                        
-                        new_ranges.append((new_start, new_end))
+                        # Display existing ranges for this group
+                        new_ranges = []
+                        for i, (start, end) in enumerate(group['ranges']):
+                            col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+                            
+                            with col1:
+                                new_start = st.text_input("Start Page", 
+                                                        value=start, 
+                                                        key=f"start_range_{group_idx}_{i}", 
+                                                        placeholder="e.g., 1")
+                            with col2:
+                                new_end = st.text_input("End Page", 
+                                                      value=end, 
+                                                      key=f"end_range_{group_idx}_{i}", 
+                                                      placeholder=f"e.g., {st.session_state.page_count}")
+                            with col3:
+                                if st.button("✕", key=f"remove_range_btn_{group_idx}_{i}"):
+                                    continue
+                            with col4:
+                                if i > 0 and st.button("↑", key=f"move_up_range_btn_{group_idx}_{i}"):
+                                    if i > 0:
+                                        new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
+                            
+                            new_ranges.append((new_start, new_end))
 
-                    # Update group ranges with new ranges
-                    group['ranges'] = new_ranges
+                        # Update group ranges with new ranges
+                        group['ranges'] = new_ranges
 
-                    # Add new range button for this group
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    with col2:
-                        if st.button("➕ Add Page Range", key=f"add_range_btn_{group_idx}", use_container_width=True):
-                            group['ranges'].append(("", ""))
-                            st.rerun()
-
-                    # Delete group button centered at the bottom
-                    if len(st.session_state.page_ranges_groups) > 1:
-                        st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
+                        # Add new range button for this group
                         col1, col2, col3 = st.columns([1, 2, 1])
                         with col2:
-                            if st.button("🗑️ Delete Group", key=f"delete_group_{group_idx}", use_container_width=True):
-                                st.session_state.page_ranges_groups.pop(group_idx)
+                            if st.button("➕ Add Page Range", key=f"add_range_btn_{group_idx}", use_container_width=True):
+                                group['ranges'].append(("", ""))
                                 st.rerun()
+
+                        # Delete group button centered at the bottom
+                        if len(st.session_state.page_ranges_groups) > 1:
+                            st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
+                            col1, col2, col3 = st.columns([1, 2, 1])
+                            with col2:
+                                if st.button("🗑️ Delete Group", key=f"delete_group_{group_idx}", use_container_width=True):
+                                    st.session_state.page_ranges_groups.pop(group_idx)
+                                    st.rerun()
+
+            except Exception as e:
+                st.error(f"Error processing groups: {str(e)}")
 
             st.markdown("<br>", unsafe_allow_html=True)  # Add spacing before the Create PDFs button
 
