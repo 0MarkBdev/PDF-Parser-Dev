@@ -411,49 +411,61 @@ def get_grid_columns(zoom_percent):
 
 def show_fullscreen_preview(pdf_file, page_count):
     """Show fullscreen preview with page selection and grouping."""
-    st.markdown("### PDF Preview and Page Selection")
+    st.markdown("""
+        <style>
+        .stButton button {
+            width: 100%;
+            border-radius: 4px;
+            padding: 0.5rem;
+        }
+        .zoom-controls .stButton button {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .page-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    # Back button
+    # Header and navigation
+    st.markdown("## PDF Management")
     if st.button("← Back to Overview"):
         st.session_state.current_pdf = None
         st.rerun()
     
-    # Show existing groups at the top
-    if st.session_state.pdf_groups.get(pdf_file.name):
-        st.markdown("### Existing Groups")
-        for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.write(f"**{group['name']}**: Pages {[p+1 for p in group['pages']]}")
-            with col2:
-                if st.button("Delete", key=f"delete_group_{pdf_file.name}_{i}"):
-                    st.session_state.pdf_groups[pdf_file.name].pop(i)
-                    st.rerun()
-        st.markdown("---")
+    # Zoom controls with cleaner layout
+    st.markdown("### Preview Controls")
+    with st.container():
+        col1, col2, col3 = st.columns([1, 8, 1])
+        with col1:
+            st.markdown('<div class="zoom-controls">', unsafe_allow_html=True)
+            if st.button("-"):
+                st.session_state.zoom_level = max(25, st.session_state.zoom_level - 25)
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col2:
+            st.slider("", 25, 400, st.session_state.zoom_level, 25, 
+                     key=f"zoom_slider_{pdf_file.name}",
+                     on_change=lambda: setattr(st.session_state, 'zoom_level', 
+                                             st.session_state[f"zoom_slider_{pdf_file.name}"]))
+        with col3:
+            st.markdown('<div class="zoom-controls">', unsafe_allow_html=True)
+            if st.button("+"):
+                st.session_state.zoom_level = min(400, st.session_state.zoom_level + 25)
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
     
-    # Zoom controls with increased range
-    col1, col2, col3 = st.columns([2, 6, 2])
-    with col1:
-        if st.button("🔍 Zoom Out", key=f"zoom_out_{pdf_file.name}"):
-            st.session_state.zoom_level = max(25, st.session_state.zoom_level - 25)
-            st.rerun()
-    with col2:
-        st.slider("Zoom Level", 25, 400, st.session_state.zoom_level, 25, 
-                 key=f"zoom_slider_{pdf_file.name}",
-                 on_change=lambda: setattr(st.session_state, 'zoom_level', 
-                                         st.session_state[f"zoom_slider_{pdf_file.name}"]))
-    with col3:
-        if st.button("🔍 Zoom In", key=f"zoom_in_{pdf_file.name}"):
-            st.session_state.zoom_level = min(400, st.session_state.zoom_level + 25)
-            st.rerun()
-    
-    # Dynamic grid layout
+    # Page grid
     cols_per_row = get_grid_columns(st.session_state.zoom_level)
     
     # Initialize selected pages if needed
     if f"{pdf_file.name}_selected_pages" not in st.session_state:
         st.session_state[f"{pdf_file.name}_selected_pages"] = set()
     
+    st.markdown("### Page Selection")
     # Display pages in grid
     for i in range(0, page_count, cols_per_row):
         cols = st.columns(cols_per_row)
@@ -461,24 +473,20 @@ def show_fullscreen_preview(pdf_file, page_count):
             page_idx = i + j
             if page_idx < page_count:
                 with col:
-                    # Container for each page
                     with st.container():
-                        # Page number and selection in one row
-                        select_col1, select_col2 = st.columns([3, 1])
+                        # Page preview
+                        preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
+                        st.image(preview, use_column_width=True)
+                        
+                        # Page controls below image
+                        select_col1, select_col2 = st.columns([2, 1])
                         with select_col1:
-                            page_label = f"Page {page_idx + 1}"
-                            if cols_per_row == 1:  # Add more details in single-page view
-                                st.markdown(f"### {page_label}")
-                            else:
-                                st.write(page_label)
+                            st.write(f"Page {page_idx + 1}")
                         with select_col2:
                             is_selected = st.checkbox("Select", 
                                                     value=page_idx in st.session_state[f"{pdf_file.name}_selected_pages"],
-                                                    key=f"select_{pdf_file.name}_{page_idx}")
-                        
-                        # Page preview below selection controls
-                        preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
-                        st.image(preview, use_column_width=True)
+                                                    key=f"select_{pdf_file.name}_{page_idx}",
+                                                    label_visibility="collapsed")
                         
                         # Update selection state
                         if is_selected:
@@ -486,13 +494,15 @@ def show_fullscreen_preview(pdf_file, page_count):
                         else:
                             st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
     
-    # Group creation interface
-    st.markdown("### Create Group")
-    col1, col2 = st.columns([3, 1])
-    with col1:
+    # Group management section
+    st.markdown("### Group Management")
+    
+    # Create group interface
+    create_col1, create_col2 = st.columns([3, 1])
+    with create_col1:
         group_name = st.text_input("Group Name (optional)", key=f"group_name_{pdf_file.name}")
-    with col2:
-        if st.button("Create Group", key=f"create_group_{pdf_file.name}"):
+    with create_col2:
+        if st.button("Create Group", key=f"create_group_{pdf_file.name}", type="primary"):
             selected_pages = sorted(list(st.session_state[f"{pdf_file.name}_selected_pages"]))
             if selected_pages:
                 if pdf_file.name not in st.session_state.pdf_groups:
@@ -506,68 +516,76 @@ def show_fullscreen_preview(pdf_file, page_count):
                 st.success(f"Group '{group['name']}' created with {len(selected_pages)} pages")
             else:
                 st.warning("Please select at least one page to create a group")
-
-def manage_pdf_groups(uploaded_files):
-    """Manage PDF groups in the UI with fullscreen preview."""
-    groups_changed = False
     
-    # Initialize session state
-    if 'zoom_level' not in st.session_state:
-        st.session_state.zoom_level = 100
-    if 'current_pdf' not in st.session_state:
-        st.session_state.current_pdf = None
-    
-    # Show fullscreen view if a PDF is selected
-    if st.session_state.current_pdf:
-        current_pdf = next((pdf for pdf in uploaded_files 
-                          if pdf.name == st.session_state.current_pdf), None)
-        if current_pdf:
-            show_fullscreen_preview(current_pdf, get_pdf_page_count(current_pdf))
-            return groups_changed
-    
-    # Show PDF overview
-    for pdf_file in uploaded_files:
-        if pdf_file.name not in st.session_state.pdf_groups:
-            st.session_state.pdf_groups[pdf_file.name] = []
-            groups_changed = True
-        
-        st.write(f"### {pdf_file.name}")
-        
-        page_count = get_pdf_page_count(pdf_file)
-        
-        if page_count == 1:
-            st.info("Single-page PDF - will be processed as one bill")
-            preview = get_page_thumbnail(pdf_file, 0, 100, True)
-            st.image(preview, width=300)
-            continue
-        
-        # Show compact preview and fullscreen button
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            preview = get_page_thumbnail(pdf_file, 0, 100, True)
-            st.image(preview, use_column_width=True)
-        with col2:
-            st.write(f"Pages: {page_count}")
-            if st.button("📄 Open Fullscreen", key=f"fullscreen_{pdf_file.name}"):
-                st.session_state.current_pdf = pdf_file.name
-                st.rerun()
-        
-        # Show existing groups
-        if st.session_state.pdf_groups[pdf_file.name]:
-            st.write("#### Existing Groups")
-            for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
+    # Show existing groups
+    if st.session_state.pdf_groups.get(pdf_file.name):
+        st.markdown("#### Existing Groups")
+        for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
+            with st.container():
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     st.write(f"**{group['name']}**: Pages {[p+1 for p in group['pages']]}")
                 with col2:
                     if st.button("Delete", key=f"delete_group_{pdf_file.name}_{i}"):
                         st.session_state.pdf_groups[pdf_file.name].pop(i)
-                        groups_changed = True
                         st.rerun()
-        
-        st.markdown("---")
+
+def split_pdf_page():
+    """Dedicated page for PDF splitting."""
+    st.markdown("## PDF Splitting")
+    st.write("Create smaller PDFs from larger documents before processing.")
     
-    return groups_changed
+    # File upload
+    uploaded_file = st.file_uploader("Upload PDF to Split", type=['pdf'], key="split_pdf_uploader")
+    
+    if uploaded_file:
+        # Get page count
+        page_count = get_pdf_page_count(uploaded_file)
+        st.write(f"Total pages: {page_count}")
+        
+        # Preview section
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            preview_page = st.number_input("Preview page", min_value=1, max_value=page_count, value=1) - 1
+        with col2:
+            preview = get_page_thumbnail(uploaded_file, preview_page, 100, True)
+            st.image(preview, use_column_width=True)
+        
+        # Split options
+        st.markdown("### Create New PDF")
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
+            start_page = st.number_input("Start Page", min_value=1, max_value=page_count, value=1)
+        with col2:
+            end_page = st.number_input("End Page", min_value=start_page, max_value=page_count, value=min(start_page, page_count))
+        with col3:
+            if st.button("Create PDF", type="primary"):
+                # Create new PDF
+                new_pdf = extract_pdf_pages(uploaded_file, range(start_page-1, end_page))
+                
+                # Add to session state for main page
+                if 'split_pdfs' not in st.session_state:
+                    st.session_state.split_pdfs = []
+                
+                # Generate unique name
+                new_name = f"Split_{start_page}-{end_page}_{uploaded_file.name}"
+                st.session_state.split_pdfs.append({
+                    'name': new_name,
+                    'content': new_pdf
+                })
+                st.success(f"Created PDF with pages {start_page}-{end_page}")
+        
+        # Show created PDFs
+        if hasattr(st.session_state, 'split_pdfs') and st.session_state.split_pdfs:
+            st.markdown("### Created PDFs")
+            for pdf in st.session_state.split_pdfs:
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"📄 {pdf['name']}")
+                with col2:
+                    if st.button("Delete", key=f"delete_split_{pdf['name']}"):
+                        st.session_state.split_pdfs.remove(pdf)
+                        st.rerun()
 
 def process_pdfs_with_groups(uploaded_files, client, prompt, include_calculations):
     """Process PDFs considering page groups."""
@@ -681,6 +699,68 @@ def initialize_session_state():
     if 'zoom_level' not in st.session_state:
         st.session_state.zoom_level = 100
 
+def manage_pdf_groups(uploaded_files):
+    """Manage PDF groups in the UI with fullscreen preview."""
+    groups_changed = False
+    
+    # Initialize session state
+    if 'zoom_level' not in st.session_state:
+        st.session_state.zoom_level = 100
+    if 'current_pdf' not in st.session_state:
+        st.session_state.current_pdf = None
+    
+    # Show fullscreen view if a PDF is selected
+    if st.session_state.current_pdf:
+        current_pdf = next((pdf for pdf in uploaded_files 
+                          if pdf.name == st.session_state.current_pdf), None)
+        if current_pdf:
+            show_fullscreen_preview(current_pdf, get_pdf_page_count(current_pdf))
+            return groups_changed
+    
+    # Show PDF overview
+    for pdf_file in uploaded_files:
+        if pdf_file.name not in st.session_state.pdf_groups:
+            st.session_state.pdf_groups[pdf_file.name] = []
+            groups_changed = True
+        
+        st.write(f"### {pdf_file.name}")
+        
+        page_count = get_pdf_page_count(pdf_file)
+        
+        if page_count == 1:
+            st.info("Single-page PDF - will be processed as one bill")
+            preview = get_page_thumbnail(pdf_file, 0, 100, True)
+            st.image(preview, width=300)
+            continue
+        
+        # Show compact preview and fullscreen button
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            preview = get_page_thumbnail(pdf_file, 0, 100, True)
+            st.image(preview, use_column_width=True)
+        with col2:
+            st.write(f"Total Pages: {page_count}")
+            if st.button("📄 Open Fullscreen", key=f"fullscreen_{pdf_file.name}", type="primary"):
+                st.session_state.current_pdf = pdf_file.name
+                st.rerun()
+        
+        # Show existing groups
+        if st.session_state.pdf_groups[pdf_file.name]:
+            st.markdown("#### Existing Groups")
+            for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"**{group['name']}**: Pages {[p+1 for p in group['pages']]}")
+                with col2:
+                    if st.button("Delete", key=f"delete_group_{pdf_file.name}_{i}"):
+                        st.session_state.pdf_groups[pdf_file.name].pop(i)
+                        groups_changed = True
+                        st.rerun()
+        
+        st.markdown("---")
+    
+    return groups_changed
+
 # Main app
 def main():
     # Get API key from secrets
@@ -689,28 +769,20 @@ def main():
     # Initialize session state
     initialize_session_state()
 
-    # Create main navigation
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("", ["PDF Processing", "PDF Splitting"])
+    # Create tabs for main content, PDF splitting, and debug info
+    main_tab, split_tab, debug_tab = st.tabs(["Main", "Split PDFs", "Debug Info"])
 
-    if page == "PDF Processing":
-        show_processing_page(client)
-    else:
-        show_splitting_page()
+    with main_tab:
+        # Create the interface
+        st.title('Bill Parser')
 
-def show_processing_page(client):
-    """Main PDF processing page."""
-    st.title("PDF Bill Parser")
-    
-    # Template selection in sidebar
-    with st.sidebar:
-        st.subheader("Template Settings")
+        # Template selection
         template_name = st.selectbox(
             "Select Template",
             options=list(TEMPLATES.keys()),
             key="template_selector"
         )
-        
+
         # Initialize fields based on template
         if 'fields' not in st.session_state or 'current_template' not in st.session_state:
             st.session_state.fields = TEMPLATES[template_name]
@@ -719,262 +791,327 @@ def show_processing_page(client):
             st.session_state.fields = TEMPLATES[template_name]
             st.session_state.current_template = template_name
             st.rerun()
+
+        # Add checkbox here
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
         
-        st.markdown("---")
-        include_calculations = st.checkbox("Include charge calculations", value=False)
-        specify_meter = st.checkbox("Specify Meter/Account", value=False)
-        if specify_meter:
-            meter_number = st.text_input("Meter/Account Number")
+        col3, col4 = st.columns([1, 2])
+        with col3:
+            specify_meter = st.checkbox("Specify Meter/Account", value=False)
+        with col4:
+            meter_number = st.text_input("", label_visibility="collapsed", disabled=not specify_meter)
 
-    # Main content area
-    uploaded_files = st.file_uploader(
-        "Upload PDF Bills",
-        type=['pdf'],
-        accept_multiple_files=True,
-        help="Upload one or more PDF bills to process"
-    )
+        st.write("Enter the fields you want to extract:")
 
-    if uploaded_files:
-        process_uploaded_files(uploaded_files, client, include_calculations)
+        # Display existing fields
+        new_fields = []
 
-def show_splitting_page():
-    """PDF splitting and management page."""
-    st.title("PDF Splitting")
-    
-    # Clear button in sidebar
-    with st.sidebar:
-        if st.button("Clear All"):
-            st.session_state.pdf_groups = {}
-            st.session_state.current_pdf = None
-            st.rerun()
-    
-    # File upload area
-    uploaded_file = st.file_uploader(
-        "Upload PDF to Split",
-        type=['pdf'],
-        help="Upload a multi-page PDF to split into smaller PDFs"
-    )
-    
-    if uploaded_file:
-        manage_pdf_splitting(uploaded_file)
+        for i, (field, format_hint) in enumerate(st.session_state.fields):
+            container = st.container()
+            col1, col2, col3 = container.columns([6, 1.5, 1.2])
 
-def manage_pdf_splitting(pdf_file):
-    """Manage PDF splitting interface."""
-    page_count = get_pdf_page_count(pdf_file)
-    
-    # Show PDF preview and controls
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("Preview & Selection")
-        
-        # Zoom controls
-        zoom_col1, zoom_col2, zoom_col3 = st.columns([1, 8, 1])
-        with zoom_col1:
-            if st.button("-"):
-                st.session_state.zoom_level = max(25, st.session_state.zoom_level - 25)
-                st.rerun()
-        with zoom_col2:
-            st.slider("Zoom", 25, 400, st.session_state.zoom_level, 25, 
-                     key="zoom_slider",
-                     label_visibility="collapsed")
-        with zoom_col3:
-            if st.button("+"):
-                st.session_state.zoom_level = min(400, st.session_state.zoom_level + 25)
-                st.rerun()
-        
-        # Page grid
-        cols_per_row = get_grid_columns(st.session_state.zoom_level)
-        for i in range(0, page_count, cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j, col in enumerate(cols):
-                page_idx = i + j
-                if page_idx < page_count:
-                    with col:
-                        preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
-                        st.image(preview, use_column_width=True)
-                        st.checkbox(f"Page {page_idx + 1}",
-                                  key=f"select_{pdf_file.name}_{page_idx}",
-                                  value=page_idx in st.session_state.get(f"{pdf_file.name}_selected_pages", set()))
-    
-    with col2:
-        st.subheader("Groups")
-        
-        # Create new group
-        with st.form("create_group"):
-            st.write("Create New Group")
-            group_name = st.text_input("Group Name (optional)")
-            selected_pages = [i for i in range(page_count) 
-                            if st.session_state.get(f"select_{pdf_file.name}_{i}", False)]
-            
-            if st.form_submit_button("Create Group"):
-                if selected_pages:
-                    if pdf_file.name not in st.session_state.pdf_groups:
-                        st.session_state.pdf_groups[pdf_file.name] = []
-                    
-                    group = {
-                        "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
-                        "pages": selected_pages
-                    }
-                    st.session_state.pdf_groups[pdf_file.name].append(group)
-                    
-                    # Clear selections
-                    for i in selected_pages:
-                        st.session_state[f"select_{pdf_file.name}_{i}"] = False
-                    
-                    st.rerun()
-                else:
-                    st.error("Please select at least one page")
-        
-        # Show existing groups
-        if pdf_file.name in st.session_state.pdf_groups:
-            st.markdown("### Existing Groups")
-            for i, group in enumerate(st.session_state.pdf_groups[pdf_file.name]):
-                with st.container():
-                    st.markdown(f"**{group['name']}**")
-                    st.write(f"Pages: {', '.join(str(p+1) for p in group['pages'])}")
-                    col1, col2 = st.columns([1, 1])
-                    with col1:
-                        if st.button("Delete", key=f"delete_{i}"):
-                            st.session_state.pdf_groups[pdf_file.name].pop(i)
-                            st.rerun()
-                    with col2:
-                        if st.button("Send to Processing", key=f"process_{i}"):
-                            # Extract pages and add to processing queue
-                            new_pdf = extract_pdf_pages(pdf_file, group['pages'])
-                            if 'processing_queue' not in st.session_state:
-                                st.session_state.processing_queue = []
-                            st.session_state.processing_queue.append({
-                                'name': f"{pdf_file.name}_{group['name']}",
-                                'content': new_pdf
-                            })
-                            st.success(f"Group '{group['name']}' sent to processing")
-
-def process_uploaded_files(uploaded_files, client, include_calculations):
-    """Process uploaded files and queued PDFs."""
-    st.subheader("Files to Process")
-    
-    # Combine uploaded files and queued PDFs
-    all_files = list(uploaded_files)
-    if 'processing_queue' in st.session_state:
-        for queued_pdf in st.session_state.processing_queue:
-            st.write(f"- {queued_pdf['name']} (from splitting)")
-        all_files.extend(pdf['content'] for pdf in st.session_state.processing_queue)
-    
-    if st.button("Process All Files"):
-        with st.spinner("Processing files..."):
-            try:
-                # Create the client with custom headers
-                pdf_client = Anthropic(
-                    api_key=st.secrets["ANTHROPIC_API_KEY"],
-                    default_headers={"anthropic-beta": "pdfs-2024-09-25"}
-                )
-                
-                # Process each file
-                results = []
-                progress_bar = st.progress(0)
-                for idx, pdf_file in enumerate(all_files):
-                    result = process_single_pdf(pdf_file, pdf_client, include_calculations)
-                    if result:
-                        results.append(result)
-                    progress_bar.progress((idx + 1) / len(all_files))
-                
-                if results:
-                    # Create DataFrame and save results
-                    df = create_results_dataframe(results)
-                    st.session_state.results_df = df
-                    
-                    # Show download button and results
-                    show_results_and_download(df)
-                    
-                    # Clear processing queue
-                    if 'processing_queue' in st.session_state:
-                        st.session_state.processing_queue = []
-                        
-                    st.success("Processing complete!")
-                else:
-                    st.error("No data was successfully extracted from the files.")
-                    
-            except Exception as e:
-                st.error(f"Error processing files: {str(e)}")
-                
-            # Show debug information in sidebar
-            with st.sidebar:
-                show_debug_info()
-
-def show_debug_info():
-    """Show debug information in a clean, organized way."""
-    st.markdown("---")
-    st.subheader("Debug Information")
-    
-    tabs = st.tabs(["API Stats", "Logs", "Issues"])
-    
-    with tabs[0]:  # API Stats
-        if hasattr(st.session_state, 'last_usage'):
-            col1, col2 = st.columns(2)
             with col1:
-                st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
+                new_field = st.text_input(f"Field {i + 1}", value=field, key=f"field_input_{i}",
+                                        label_visibility="collapsed")
             with col2:
-                st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
-    
-    with tabs[1]:  # Logs
-        if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
-            for log in st.session_state.api_logs:
-                with st.expander(f"📄 {log['file_processed']}"):
-                    st.text(f"Time: {log['timestamp']}")
-                    if log['error']:
-                        st.error(log['error'])
+                new_format = st.text_input("Format", value=format_hint, key=f"format_input_{i}",
+                                         label_visibility="collapsed")
+
+            with col3:
+                btn_container = st.container()
+                c1, c2, c3 = btn_container.columns(3)
+                with c1:
+                    if i > 0 and st.button("↑", key=f"up_{i}", use_container_width=True):
+                        fields = list(st.session_state.fields)
+                        fields[i], fields[i - 1] = fields[i - 1], fields[i]
+                        st.session_state.fields = fields
+                        st.rerun()
+                with c2:
+                    if i < len(st.session_state.fields) - 1 and st.button("↓", key=f"down_{i}", use_container_width=True):
+                        fields = list(st.session_state.fields)
+                        fields[i], fields[i + 1] = fields[i + 1], fields[i]
+                        st.session_state.fields = fields
+                        st.rerun()
+                with c3:
+                    if st.button("✕", key=f"remove_button_{i}", use_container_width=True):
+                        st.session_state.fields.pop(i)
+                        st.rerun()
+
+            new_fields.append((new_field, new_format))
+
+        # Update session state with new field values
+        st.session_state.fields = new_fields
+
+        # Add new field button
+        if st.button("Add Field"):
+            st.session_state.fields.append(("", ""))
+            st.rerun()
+
+        # Create the prompt string based on fields
+        field_dict = {field: "" for field, _ in st.session_state.fields if field}
+
+        tiered_calculation_instructions = """
+       a. Use the plain field name for the first tiers/instances/charges (e.g., "FIELD")
+       b. Add a suffix for each additional tiers/instances/charges (e.g., "FIELD_2", "FIELD_3")
+       c. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
+       d. If there isn't a clearly stated total, calculate and create one with the sum of the tiers/instances/charges. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal").""" if include_calculations else """
+       a. If there is a total value stated, use it and add a '_Total' suffix for the total (e.g., "FIELD_Total")
+       b. If there isn't a clearly stated total, calculate and create one with the sum of the tiers/instances/charges. You MUST add a "CalcTotal" suffix to indicate it was calculated. (e.g., "FIELD_CalcTotal")."""
+
+        prompt = f"""Your objective is to extract key information from this utility bill and present it in a standardized JSON format. Follow these steps:
+
+1. Carefully analyze the utility bill content.
+2. Identify and extract the required fields.
+3. Format the extracted information according to the specifications.
+4. Handle any tiered charges appropriately.
+5. Compile the final JSON output.
+
+Required Fields{f" to be extracted only for {meter_number}" if specify_meter and meter_number else ""}:
+{json.dumps(field_dict, indent=2)}
+
+Special Instructions:
+1. For charges that show multiple charges with the main part of the name identical but with seasonal suffixes (e.g., "Charge A Summer", "Charge A Winter"), or tiered charges (like water service charges), or multiple instances of the same charge (when a rate changes in the middle of the bill period), or any other case where the same charge is shown multiple times with different values, use the following instructions:{tiered_calculation_instructions}
+
+2. Formatting Rules:
+   - Each field should be a separate key at the root level of the JSON
+   - Do not nest the values in sub-objects
+   - Return each amount as a plain number
+   - Do not include gallons, rates, or date ranges
+
+3. If a field is not found in the bill, use null as the value.
+
+Return the data in this structure:
+{json.dumps(field_dict, indent=2)}
+
+Remember to replace the null values with the actual extracted data or keep as null if the information is not found in the bill.
+
+Provide ONLY the JSON object as your final output, with no additional text."""
+
+        # Add file uploader
+        uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
+
+        if uploaded_files:
+            # PDF grouping interface
+            st.write("## PDF Management")
+            groups_changed = manage_pdf_groups(uploaded_files)
+
+            # Process Bills button logic
+            if st.button('Process Bills'):
+                try:
+                    # Create the client with custom headers
+                    pdf_client = Anthropic(
+                        api_key=st.secrets["ANTHROPIC_API_KEY"],
+                        default_headers={"anthropic-beta": "pdfs-2024-09-25"}
+                    )
+
+                    # Process PDFs with groups
+                    individual_results = process_pdfs_with_groups(uploaded_files, pdf_client, prompt, include_calculations)
+
+                    if individual_results:
+                        df = pd.DataFrame(individual_results)
+                        columns = ['filename'] + [col for col in df.columns if col != 'filename']
+                        df = df[columns]
+                        st.session_state.results_df = df
                     else:
-                        st.json(log['response'])
-    
-    with tabs[2]:  # Issues
-        if hasattr(st.session_state, 'problematic_files'):
-            for file in st.session_state.problematic_files:
-                st.error(f"Issue with {file['filename']}")
-                st.code(file['error'])
+                        st.error("No data was successfully extracted from the files.")
 
-def create_results_dataframe(results):
-    """Create and format results DataFrame."""
-    df = pd.DataFrame(results)
-    
-    # Ensure filename is first column
-    columns = ['filename'] + [col for col in df.columns if col != 'filename']
-    df = df[columns]
-    
-    return df
+                except Exception as e:
+                    st.error(f"Error processing files: {str(e)}")
 
-def show_results_and_download(df):
-    """Show results table and download button."""
-    # Create Excel file
-    excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
-    df.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
+    with split_tab:
+        split_pdf_page()
     
-    # Auto-adjust column widths
-    worksheet = excel_buffer.sheets['Extracted Data']
-    for idx, col in enumerate(df.columns):
-        max_length = max(
-            df[col].astype(str).apply(len).max(),
-            len(str(col))
+    with debug_tab:
+        # Create sections using expanders
+        with st.expander("📤 API Call Preview", expanded=True):
+            st.write("Preview the API call that will be sent when processing files")
+            
+            if uploaded_files:
+                col1, col2 = st.columns([1, 1])
+                
+                # Create buttons side by side but keep display area unified
+                preview_clicked = col1.button("Generate API Call Preview")
+                count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
+                
+                if preview_clicked or count_tokens_clicked:
+                    # If token counting was requested, show it first
+                    if count_tokens_clicked:
+                        try:
+                            token_count = count_tokens(client, prompt, include_calculations)
+                            st.success("Token Count Results:")
+                            # Print the full response for debugging
+                            print("Token count response:", token_count)
+                            st.json(token_count)  # Show the full response
+                            st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                        except Exception as e:
+                            st.error(f"Error counting tokens: {str(e)}")
+                            st.error("Please check the API documentation or try again later.")
+                            
+                        # Add a visual separator
+                        st.markdown("---")
+                    
+                    # Show the API preview (same for both buttons)
+                    preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                    st.session_state.api_preview = preview
+                    st.json(preview)
+            else:
+                st.info("Upload files in the main tab to preview the API call")
+        
+        with st.expander("📊 Last API Call Statistics", expanded=False):
+            if hasattr(st.session_state, 'last_usage'):
+                st.write("Last API Call Statistics:")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
+                with col2:
+                    st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
+                
+                # Add stop reason explanation
+                stop_reason = st.session_state.last_usage['stop_reason']
+                explanation = {
+                    "end_turn": "The model completed its response naturally.",
+                    "max_tokens": "The response was cut off due to reaching the token limit.",
+                    "stop_sequence": "The model stopped at a designated stop sequence.",
+                    "error": "The response was terminated due to an error."
+                }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
+                
+                st.write("**Stop Reason:**")
+                st.info(explanation)
+            else:
+                st.write("No API calls made yet.")
+        
+        with st.expander("📝 Raw JSON Response", expanded=False):
+            if hasattr(st.session_state, 'raw_json_response'):
+                st.write("Raw JSON Response from last API call:")
+                st.code(st.session_state.raw_json_response, language='json')
+            else:
+                st.write("No API response data available yet.")
+
+        with st.expander("📋 API Call Logs", expanded=True):
+            if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
+                for log in st.session_state.api_logs:
+                    st.markdown(f"### File: {log['file_processed']}")
+                    st.markdown("**Timestamp:**")
+                    st.write(log['timestamp'])
+                    
+                    if log['error']:
+                        st.error(f"**Error:** {log['error']}")
+                    else:
+                        st.markdown("**Number of Bills Returned:**")
+                        st.write(log['response']['num_bills_returned'])
+                        st.markdown("**Fields Returned:**")
+                        st.write(log['response']['fields_returned'])
+                        
+                        # Use tabs instead of nested expanders
+                        raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
+                        
+                        with raw_tab:
+                            st.json(log['response']['raw_response'])
+                        
+                        with parsed_tab:
+                            st.json(log['response']['parsed_response'])
+                        
+                    # Add a visual separator between files
+                    st.markdown("---")
+            else:
+                st.info("No API calls logged yet.")
+
+        with st.expander("⚠️ Problematic Files", expanded=True):
+            if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
+                for file_log in st.session_state.problematic_files:
+                    st.markdown(f"### File: {file_log['filename']}")
+                    st.markdown("**Response data:**")
+                    st.json(file_log['response'])
+                    st.markdown("---")
+            else:
+                st.info("No problematic files detected in the last processing run.")
+
+    # Move Excel creation and download button outside the Process Bills button block
+    if hasattr(st.session_state, 'results_df'):
+        # Get the original field order from session state
+        original_fields = [field for field, _ in st.session_state.fields if field]
+        
+        # Group and sort columns by base names while preserving original field order
+        def get_base_name(col):
+            # Skip filename column
+            if col == 'filename':
+                return '000_filename'  # Changed to ensure filename is always first
+            # Split on underscore and get base name
+            parts = col.split('_')
+            base = '_'.join(parts[:-1]) if len(parts) > 1 else col
+            # Get the original position of the base field
+            try:
+                original_pos = original_fields.index(base)
+            except ValueError:
+                # If base not in original fields, put it at the end
+                original_pos = len(original_fields)
+            return f"{original_pos + 1:03d}_{base}"  # Added +1 to make room for filename
+
+        def get_suffix_priority(col):
+            # Define priority for suffixes (no suffix = 0, _2 = 1, _CalcTotal = 2, etc)
+            if col == 'filename':
+                return -1  # Ensure filename stays first
+            if '_' not in col:
+                return 0
+            suffix = col.split('_')[-1]
+            priorities = {
+                '2': 1,
+                '3': 2,
+                '4': 3,
+                'Total': 98,
+                'CalcTotal': 99
+            }
+            return priorities.get(suffix, 50)  # Default priority for unknown suffixes
+
+        # Sort columns first by original field order (via base name), then by suffix priority
+        columns = st.session_state.results_df.columns.tolist()
+        sorted_columns = sorted(
+            columns,
+            key=lambda x: (get_base_name(x), get_suffix_priority(x))
         )
-        adjusted_width = min(max_length + 2, 50)
-        col_letter = chr(65 + (idx % 26))
-        if idx >= 26:
-            col_letter = chr(64 + (idx // 26)) + col_letter
-        worksheet.column_dimensions[col_letter].width = adjusted_width
-    
-    excel_buffer.close()
-    
-    # Download button
-    with open('results.xlsx', 'rb') as f:
-        st.download_button(
-            'Download Results',
-            f,
-            'results.xlsx',
-            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-    
-    # Display results
-    st.dataframe(df)
+
+        # Reorder the DataFrame columns
+        df_sorted = st.session_state.results_df[sorted_columns]
+        
+        # Create Excel file with sorted columns
+        excel_buffer = pd.ExcelWriter('results.xlsx', engine='openpyxl')
+        df_sorted.to_excel(excel_buffer, index=False, sheet_name='Extracted Data')
+
+        # Auto-adjust column widths more safely
+        worksheet = excel_buffer.sheets['Extracted Data']
+        for idx, col in enumerate(df_sorted.columns):
+            # Get max length of column data and column header
+            max_length = max(
+                df_sorted[col].astype(str).apply(len).max(),
+                len(str(col))
+            )  # Properly close max() function
+            
+            # Limit column width to a reasonable maximum (e.g., 50 characters)
+            adjusted_width = min(max_length + 2, 50)
+            
+            # Convert numeric index to Excel column letter
+            col_letter = chr(65 + (idx % 26))
+            if idx >= 26:
+                col_letter = chr(64 + (idx // 26)) + col_letter
+            worksheet.column_dimensions[col_letter].width = adjusted_width
+
+        excel_buffer.close()
+
+        # Add download button
+        with open('results.xlsx', 'rb') as f:
+            st.download_button(
+                'Download Results',
+                f,
+                'results.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+        # Display the results in the app with sorted columns
+        st.write("### Extracted Data")
+        st.dataframe(df_sorted)
+
 
 # Run the app with password protection
 # Run the app with password protection
