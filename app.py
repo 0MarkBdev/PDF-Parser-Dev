@@ -450,10 +450,13 @@ def main():
             # Process each group
             for group_idx, group in enumerate(st.session_state.page_ranges_groups):
                 with st.container():
-                    st.markdown(f"""
+                    st.markdown("""
                         <div class="group-container">
-                            <div class="group-header">{group['name']}</div>
-                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Group header
+                    st.markdown(f"""
+                        <div class="group-header">{group['name']}</div>
                     """, unsafe_allow_html=True)
                     
                     # Allow editing group name
@@ -508,6 +511,8 @@ def main():
                             if st.button("🗑️ Delete Group", key=f"delete_group_{group_idx}", use_container_width=True):
                                 st.session_state.page_ranges_groups.pop(group_idx)
                                 st.rerun()
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)  # Close the group container
 
             st.markdown("<br>", unsafe_allow_html=True)  # Add spacing before the Create PDFs button
 
