@@ -779,6 +779,16 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
+                            # Store last API usage statistics
+                            st.session_state.last_usage = {
+                                'input_tokens': message.usage.input_tokens,
+                                'output_tokens': message.usage.output_tokens,
+                                'stop_reason': message.stop_reason
+                            }
+
+                            # Store raw JSON response
+                            st.session_state.raw_json_response = message.model_dump_json()
+
                             # Parse response - handle direct JSON response
                             try:
                                 # First try to parse as a complete response format
@@ -819,10 +829,25 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 )
 
                             except json.JSONDecodeError as e:
+                                # Add to problematic files
+                                if 'problematic_files' not in st.session_state:
+                                    st.session_state.problematic_files = []
+                                st.session_state.problematic_files.append({
+                                    'filename': pdf_file.name,
+                                    'response': str(e),
+                                    'raw_response': message.content[0].text
+                                })
                                 st.error(f"Error parsing response for {pdf_file.name}: {str(e)}")
                                 continue
 
                         except Exception as e:
+                            # Add to problematic files
+                            if 'problematic_files' not in st.session_state:
+                                st.session_state.problematic_files = []
+                            st.session_state.problematic_files.append({
+                                'filename': pdf_file.name,
+                                'response': str(e)
+                            })
                             # Log failed API call
                             st.session_state.api_logs.append(
                                 log_api_call(pdf_file, None, str(e))
@@ -874,6 +899,16 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
+                            # Store last API usage statistics
+                            st.session_state.last_usage = {
+                                'input_tokens': message.usage.input_tokens,
+                                'output_tokens': message.usage.output_tokens,
+                                'stop_reason': message.stop_reason
+                            }
+
+                            # Store raw JSON response
+                            st.session_state.raw_json_response = message.model_dump_json()
+
                             # Parse response
                             try:
                                 response_data = json.loads(message.content[0].text)
@@ -897,10 +932,26 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 )
 
                             except json.JSONDecodeError as e:
+                                # Add to problematic files
+                                if 'problematic_files' not in st.session_state:
+                                    st.session_state.problematic_files = []
+                                st.session_state.problematic_files.append({
+                                    'filename': file_name,
+                                    'response': str(e),
+                                    'raw_response': message.content[0].text
+                                })
                                 st.error(f"Error parsing response for {file_name}: {str(e)}")
                                 continue
 
                         except Exception as e:
+                            # Add to problematic files
+                            if 'problematic_files' not in st.session_state:
+                                st.session_state.problematic_files = []
+                            st.session_state.problematic_files.append({
+                                'filename': file_name,
+                                'response': str(e)
+                            })
+                            # Log failed API call
                             st.session_state.api_logs.append(
                                 log_api_call(temp_file, None, str(e))
                             )
