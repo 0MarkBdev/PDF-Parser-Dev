@@ -394,7 +394,28 @@ def main():
         st.title("PDF Splitting")
         st.markdown("Split your PDF documents into smaller PDFs by selecting page ranges.")
 
-        # File upload area
+        # File upload area with custom styling
+        st.markdown("""
+            <style>
+            .stButton > button {
+                width: 100%;
+            }
+            .group-header {
+                font-size: 1.2em;
+                font-weight: 600;
+                margin-bottom: 0.5em;
+                color: #333;
+            }
+            .group-container {
+                background-color: #f8f9fa;
+                padding: 1em;
+                border-radius: 0.5em;
+                margin: 0.5em 0;
+                border: 1px solid #e9ecef;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         uploaded_pdf = st.file_uploader("Upload PDF", type=['pdf'], key="pdf_splitter")
 
         if uploaded_pdf:
@@ -413,71 +434,87 @@ def main():
             # Display total page count
             st.write(f"Total pages: {st.session_state.page_count}")
 
-            # Add "New Group" button at the top
-            if st.button("New Group"):
-                group_num = len(st.session_state.page_ranges_groups) + 1
-                st.session_state.page_ranges_groups.append({
-                    "name": f"Group {group_num}",
-                    "ranges": [("", "")]
-                })
-                st.rerun()
+            # Add "New Group" button at the top with full width
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                if st.button("➕ New Group", use_container_width=True):
+                    group_num = len(st.session_state.page_ranges_groups) + 1
+                    st.session_state.page_ranges_groups.append({
+                        "name": f"Group {group_num}",
+                        "ranges": [("", "")]
+                    })
+                    st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
 
             # Process each group
             for group_idx, group in enumerate(st.session_state.page_ranges_groups):
-                st.markdown(f"### {group['name']}")
-                
-                # Allow editing group name
-                new_name = st.text_input("Group Name", 
-                                       value=group['name'], 
-                                       key=f"group_name_{group_idx}")
-                group['name'] = new_name
-
-                # Delete group button (don't allow deleting the last group)
-                if len(st.session_state.page_ranges_groups) > 1:
-                    if st.button("Delete Group", key=f"delete_group_{group_idx}"):
-                        st.session_state.page_ranges_groups.pop(group_idx)
-                        st.rerun()
-
-                st.write("Enter page ranges to create new PDFs:")
-                
-                # Display existing ranges for this group
-                new_ranges = []
-                for i, (start, end) in enumerate(group['ranges']):
-                    col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+                with st.container():
+                    st.markdown(f"""
+                        <div class="group-container">
+                            <div class="group-header">{group['name']}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
                     
-                    with col1:
-                        new_start = st.text_input("Start Page", 
-                                                value=start, 
-                                                key=f"start_range_{group_idx}_{i}", 
-                                                placeholder="e.g., 1")
+                    # Allow editing group name
+                    new_name = st.text_input("Group Name", 
+                                           value=group['name'], 
+                                           key=f"group_name_{group_idx}",
+                                           label_visibility="collapsed")
+                    group['name'] = new_name
+
+                    st.write("Enter page ranges:")
+                    
+                    # Display existing ranges for this group
+                    new_ranges = []
+                    for i, (start, end) in enumerate(group['ranges']):
+                        col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+                        
+                        with col1:
+                            new_start = st.text_input("Start Page", 
+                                                    value=start, 
+                                                    key=f"start_range_{group_idx}_{i}", 
+                                                    placeholder="e.g., 1")
+                        with col2:
+                            new_end = st.text_input("End Page", 
+                                                  value=end, 
+                                                  key=f"end_range_{group_idx}_{i}", 
+                                                  placeholder=f"e.g., {st.session_state.page_count}")
+                        with col3:
+                            if st.button("✕", key=f"remove_range_btn_{group_idx}_{i}"):
+                                continue
+                        with col4:
+                            if i > 0 and st.button("↑", key=f"move_up_range_btn_{group_idx}_{i}"):
+                                if i > 0:
+                                    new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
+                        
+                        new_ranges.append((new_start, new_end))
+
+                    # Update group ranges with new ranges
+                    group['ranges'] = new_ranges
+
+                    # Add new range button for this group
+                    col1, col2, col3 = st.columns([1, 2, 1])
                     with col2:
-                        new_end = st.text_input("End Page", 
-                                              value=end, 
-                                              key=f"end_range_{group_idx}_{i}", 
-                                              placeholder=f"e.g., {st.session_state.page_count}")
-                    with col3:
-                        if st.button("✕", key=f"remove_range_btn_{group_idx}_{i}"):
-                            continue
-                    with col4:
-                        if i > 0 and st.button("↑", key=f"move_up_range_btn_{group_idx}_{i}"):
-                            if i > 0:
-                                new_ranges[-1], (new_start, new_end) = (new_start, new_end), new_ranges[-1]
-                    
-                    new_ranges.append((new_start, new_end))
+                        if st.button("➕ Add Page Range", key=f"add_range_btn_{group_idx}", use_container_width=True):
+                            group['ranges'].append(("", ""))
+                            st.rerun()
 
-                # Update group ranges with new ranges
-                group['ranges'] = new_ranges
+                    # Delete group button centered at the bottom
+                    if len(st.session_state.page_ranges_groups) > 1:
+                        st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
+                        col1, col2, col3 = st.columns([1, 2, 1])
+                        with col2:
+                            if st.button("🗑️ Delete Group", key=f"delete_group_{group_idx}", use_container_width=True):
+                                st.session_state.page_ranges_groups.pop(group_idx)
+                                st.rerun()
 
-                # Add new range button for this group
-                if st.button("Add Page Range", key=f"add_range_btn_{group_idx}"):
-                    group['ranges'].append(("", ""))
-                    st.rerun()
+            st.markdown("<br>", unsafe_allow_html=True)  # Add spacing before the Create PDFs button
 
-                st.markdown("---")  # Add separator between groups
-
-            # Create PDFs button
+            # Create PDFs button - full width and prominent
             button_label = "Create PDFs" if len(st.session_state.page_ranges_groups) > 1 else "Create PDF"
             if st.button(button_label, key="create_pdf_btn", 
+                        use_container_width=True,
                         disabled=not any(any(start and end for start, end in group['ranges']) 
                                        for group in st.session_state.page_ranges_groups)):
                 valid_ranges_by_group = []
@@ -756,28 +793,28 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         current_file += 1
                         status_container.info(f"Processing file {current_file} of {total_files}: {pdf_file.name}")
                         
-                        # Prepare message content for this PDF
-                        message_content = [
-                            {
-                                "type": "document",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "application/pdf",
-                                    "data": base64.b64encode(pdf_file.read()).decode()
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                        pdf_file.seek(0)  # Reset file pointer
-
                         try:
+                            # Prepare message content for this PDF
+                            message_content = [
+                                {
+                                    "type": "document",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "application/pdf",
+                                        "data": base64.b64encode(pdf_file.read()).decode()
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
+                            pdf_file.seek(0)  # Reset file pointer
+
                             # Send to Claude API
                             message = pdf_client.messages.create(
                                 model="claude-3-5-sonnet-20241022",
@@ -983,7 +1020,7 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                         status_container.error("No data was successfully extracted from the files.")
 
                 except Exception as e:
-                    status_container.error(f"Error processing files: {str(e)}")
+                    status_container.error(f"Error initializing PDF processing: {str(e)}")
             else:
                 st.warning("Please upload files or select split PDFs to process.")
 
