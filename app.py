@@ -357,8 +357,8 @@ def get_pdf_page_count(pdf_file):
     pdf_file.seek(0)
     return page_count
 
-def get_page_thumbnail(pdf_file, page_num, zoom_percent=20):
-    """Generate a thumbnail for a specific page of a PDF with adjustable zoom."""
+def get_page_thumbnail(pdf_file, page_num, zoom_percent=100, is_thumbnail=False):
+    """Generate a thumbnail or full-size preview for a PDF page."""
     pdf_file.seek(0)
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
         temp_file.write(pdf_file.read())
@@ -366,8 +366,15 @@ def get_page_thumbnail(pdf_file, page_num, zoom_percent=20):
     
     doc = fitz.open(temp_file_path)
     page = doc[page_num]
-    zoom_factor = zoom_percent / 100.0
-    matrix = fitz.Matrix(2.0 * zoom_factor, 2.0 * zoom_factor)
+    
+    if is_thumbnail:
+        # Small thumbnail for initial view
+        matrix = fitz.Matrix(0.3, 0.3)
+    else:
+        # Full-size preview with zoom
+        zoom_factor = zoom_percent / 100.0
+        matrix = fitz.Matrix(2.0 * zoom_factor, 2.0 * zoom_factor)
+    
     pix = page.get_pixmap(matrix=matrix)
     img_data = pix.tobytes("png")
     doc.close()
@@ -388,159 +395,132 @@ def extract_pdf_pages(pdf_file, page_numbers):
     output.seek(0)
     return output
 
-def initialize_session_state():
-    """Initialize session state variables for PDF handling."""
-    if 'pdf_groups' not in st.session_state:
-        st.session_state.pdf_groups = {}  # {pdf_name: [{name: str, pages: list[int]}]}
-    if 'current_pdf' not in st.session_state:
-        st.session_state.current_pdf = None
-    if 'page_previews' not in st.session_state:
-        st.session_state.page_previews = {}
-
-def calculate_grid_columns(zoom_percent):
-    """Calculate number of grid columns based on zoom level."""
+def get_grid_columns(zoom_percent):
+    """Determine number of grid columns based on zoom level."""
     if zoom_percent >= 150:
-        return 2  # Very zoomed in = 2 columns
+        return 2
     elif zoom_percent >= 100:
-        return 3  # Normal zoom = 3 columns
+        return 3
     elif zoom_percent >= 50:
-        return 4  # Zoomed out = 4 columns
+        return 4
     else:
-        return 5  # Very zoomed out = 5 columns
+        return 5
 
 def show_fullscreen_preview(pdf_file, page_count):
-    """Show a fullscreen modal dialog with PDF preview and page selection."""
-    modal_key = f"modal_{pdf_file.name.replace(' ', '_').replace('.', '_')}"
+    """Show fullscreen preview with page selection and grouping."""
+    st.markdown("### PDF Preview and Page Selection")
     
-    # Initialize modal state if not exists
-    if f"zoom_{modal_key}" not in st.session_state:
-        st.session_state[f"zoom_{modal_key}"] = 100
-    if f"show_{modal_key}" not in st.session_state:
-        st.session_state[f"show_{modal_key}"] = False
-    
-    # Fullscreen button in main view
-    if st.button(f"🔍 Fullscreen Preview", key=f"fullscreen_{modal_key}"):
-        st.session_state[f"show_{modal_key}"] = True
+    # Back button
+    if st.button("← Back to Overview"):
+        st.session_state.current_pdf = None
         st.rerun()
     
-    # Show small preview thumbnails in main view
-    if page_count > 1:
-        st.write("Quick Preview:")
-        preview_cols = st.columns(min(4, page_count))
-        for i in range(min(4, page_count)):
-            with preview_cols[i]:
-                preview = get_page_thumbnail(pdf_file, i, 20)  # Small thumbnails
-                st.image(preview, use_column_width=True)
-        if page_count > 4:
-            st.caption(f"+ {page_count - 4} more pages")
+    # Zoom controls
+    col1, col2, col3 = st.columns([2, 6, 2])
+    with col1:
+        if st.button("🔍 Zoom Out", key=f"zoom_out_{pdf_file.name}"):
+            st.session_state.zoom_level = max(25, st.session_state.zoom_level - 25)
+            st.rerun()
+    with col2:
+        st.slider("Zoom Level", 25, 200, st.session_state.zoom_level, 25, 
+                 key=f"zoom_slider_{pdf_file.name}",
+                 on_change=lambda: setattr(st.session_state, 'zoom_level', 
+                                         st.session_state[f"zoom_slider_{pdf_file.name}"]))
+    with col3:
+        if st.button("🔍 Zoom In", key=f"zoom_in_{pdf_file.name}"):
+            st.session_state.zoom_level = min(200, st.session_state.zoom_level + 25)
+            st.rerun()
     
-    # Fullscreen modal dialog
-    if st.session_state[f"show_{modal_key}"]:
-        with st.expander("", expanded=True):  # Full-width container
-            # Modal header with close button
-            col1, col2 = st.columns([6, 1])
-            with col1:
-                st.write(f"### {pdf_file.name}")
-            with col2:
-                if st.button("❌ Close", key=f"close_{modal_key}"):
-                    st.session_state[f"show_{modal_key}"] = False
-                    st.rerun()
-            
-            # Zoom controls
-            col1, col2, col3 = st.columns([1, 4, 1])
-            with col1:
-                if st.button("➖ Zoom Out", key=f"zoom_out_{modal_key}"):
-                    st.session_state[f"zoom_{modal_key}"] = max(25, st.session_state[f"zoom_{modal_key}"] - 25)
-                    st.rerun()
-            with col2:
-                st.progress(st.session_state[f"zoom_{modal_key}"] / 200)
-                st.caption(f"Zoom: {st.session_state[f"zoom_{modal_key}"]}%")
-            with col3:
-                if st.button("➕ Zoom In", key=f"zoom_in_{modal_key}"):
-                    st.session_state[f"zoom_{modal_key}"] = min(200, st.session_state[f"zoom_{modal_key}"] + 25)
-                    st.rerun()
-            
-            # Dynamic grid layout
-            n_cols = calculate_grid_columns(st.session_state[f"zoom_{modal_key}"])
-            for i in range(0, page_count, n_cols):
-                cols = st.columns(n_cols)
-                for j, col in enumerate(cols):
-                    page_idx = i + j
-                    if page_idx < page_count:
-                        with col:
-                            st.write(f"**Page {page_idx + 1}**")
-                            preview = get_page_thumbnail(
-                                pdf_file, 
-                                page_idx, 
-                                st.session_state[f"zoom_{modal_key}"]
-                            )
-                            st.image(preview, use_column_width=True)
-                            if st.checkbox(
-                                "Select", 
-                                key=f"{pdf_file.name}_page_{page_idx}",
-                                value=f"{pdf_file.name}_page_{page_idx}" in st.session_state and 
-                                      st.session_state[f"{pdf_file.name}_page_{page_idx}"]
-                            ):
-                                if f"{pdf_file.name}_selected_pages" not in st.session_state:
-                                    st.session_state[f"{pdf_file.name}_selected_pages"] = set()
-                                st.session_state[f"{pdf_file.name}_selected_pages"].add(page_idx)
-                            else:
-                                if f"{pdf_file.name}_selected_pages" in st.session_state:
-                                    st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
-            
-            # Group creation interface at the bottom of modal
-            st.markdown("---")
-            st.write("### Create Group")
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                group_name = st.text_input(
-                    "Group Name (optional)", 
-                    key=f"group_name_{pdf_file.name}"
-                )
-            with col2:
-                selected_count = len(st.session_state.get(f"{pdf_file.name}_selected_pages", set()))
-                st.write(f"Selected Pages: {selected_count}")
-            with col3:
-                if st.button("Create Group", key=f"create_group_{modal_key}", type="primary"):
-                    selected_pages = sorted(list(
-                        st.session_state.get(f"{pdf_file.name}_selected_pages", set())
-                    ))
-                    if selected_pages:
-                        if pdf_file.name not in st.session_state.pdf_groups:
-                            st.session_state.pdf_groups[pdf_file.name] = []
-                        group = {
-                            "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
-                            "pages": selected_pages
-                        }
-                        st.session_state.pdf_groups[pdf_file.name].append(group)
-                        # Clear selection after group creation
-                        st.session_state[f"{pdf_file.name}_selected_pages"] = set()
-                        st.session_state[f"show_{modal_key}"] = False  # Close modal after creating group
-                        st.rerun()
+    # Dynamic grid layout
+    cols_per_row = get_grid_columns(st.session_state.zoom_level)
+    
+    # Initialize selected pages if needed
+    if f"{pdf_file.name}_selected_pages" not in st.session_state:
+        st.session_state[f"{pdf_file.name}_selected_pages"] = set()
+    
+    # Display pages in grid
+    for i in range(0, page_count, cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, col in enumerate(cols):
+            page_idx = i + j
+            if page_idx < page_count:
+                with col:
+                    preview = get_page_thumbnail(pdf_file, page_idx, st.session_state.zoom_level)
+                    st.image(preview, use_column_width=True)
+                    
+                    # Page selection
+                    if st.checkbox(f"Select Page {page_idx + 1}", 
+                                 value=page_idx in st.session_state[f"{pdf_file.name}_selected_pages"],
+                                 key=f"select_{pdf_file.name}_{page_idx}"):
+                        st.session_state[f"{pdf_file.name}_selected_pages"].add(page_idx)
                     else:
-                        st.warning("Please select at least one page to create a group.")
+                        st.session_state[f"{pdf_file.name}_selected_pages"].discard(page_idx)
+    
+    # Group creation interface
+    st.markdown("### Create Group")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        group_name = st.text_input("Group Name (optional)", key=f"group_name_{pdf_file.name}")
+    with col2:
+        if st.button("Create Group", key=f"create_group_{pdf_file.name}"):
+            selected_pages = sorted(list(st.session_state[f"{pdf_file.name}_selected_pages"]))
+            if selected_pages:
+                if pdf_file.name not in st.session_state.pdf_groups:
+                    st.session_state.pdf_groups[pdf_file.name] = []
+                group = {
+                    "name": group_name or f"Group {len(st.session_state.pdf_groups[pdf_file.name]) + 1}",
+                    "pages": selected_pages
+                }
+                st.session_state.pdf_groups[pdf_file.name].append(group)
+                st.session_state[f"{pdf_file.name}_selected_pages"] = set()
+                st.success(f"Group '{group['name']}' created with {len(selected_pages)} pages")
+            else:
+                st.warning("Please select at least one page to create a group")
 
 def manage_pdf_groups(uploaded_files):
-    """Manage PDF groups in the UI with improved preview and modal dialogs."""
+    """Manage PDF groups in the UI with fullscreen preview."""
     groups_changed = False
     
+    # Initialize session state
+    if 'zoom_level' not in st.session_state:
+        st.session_state.zoom_level = 100
+    if 'current_pdf' not in st.session_state:
+        st.session_state.current_pdf = None
+    
+    # Show fullscreen view if a PDF is selected
+    if st.session_state.current_pdf:
+        current_pdf = next((pdf for pdf in uploaded_files 
+                          if pdf.name == st.session_state.current_pdf), None)
+        if current_pdf:
+            show_fullscreen_preview(current_pdf, get_pdf_page_count(current_pdf))
+            return groups_changed
+    
+    # Show PDF overview
     for pdf_file in uploaded_files:
         if pdf_file.name not in st.session_state.pdf_groups:
             st.session_state.pdf_groups[pdf_file.name] = []
             groups_changed = True
         
-        page_count = get_pdf_page_count(pdf_file)
-        
         st.write(f"### {pdf_file.name}")
+        
+        page_count = get_pdf_page_count(pdf_file)
         
         if page_count == 1:
             st.info("Single-page PDF - will be processed as one bill")
-            preview = get_page_thumbnail(pdf_file, 0, 20)  # Small preview for single page
-            st.image(preview, width=200)
+            preview = get_page_thumbnail(pdf_file, 0, 100, True)
+            st.image(preview, width=300)
             continue
         
-        # Show fullscreen preview modal
-        show_fullscreen_preview(pdf_file, page_count)
+        # Show compact preview and fullscreen button
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            preview = get_page_thumbnail(pdf_file, 0, 100, True)
+            st.image(preview, use_column_width=True)
+        with col2:
+            st.write(f"Pages: {page_count}")
+            if st.button("📄 Open Fullscreen", key=f"fullscreen_{pdf_file.name}"):
+                st.session_state.current_pdf = pdf_file.name
+                st.rerun()
         
         # Show existing groups
         if st.session_state.pdf_groups[pdf_file.name]:
@@ -555,7 +535,7 @@ def manage_pdf_groups(uploaded_files):
                         groups_changed = True
                         st.rerun()
         
-        st.markdown("---")  # Visual separator between PDFs
+        st.markdown("---")
     
     return groups_changed
 
@@ -661,6 +641,15 @@ def process_single_pdf(pdf_file, client, prompt, include_calculations, filename=
         )
         st.error(f"Error processing {filename or pdf_file.name}: {str(e)}")
         return None
+
+def initialize_session_state():
+    """Initialize session state variables for PDF handling."""
+    if 'pdf_groups' not in st.session_state:
+        st.session_state.pdf_groups = {}  # {pdf_name: [{name: str, pages: list[int]}]}
+    if 'current_pdf' not in st.session_state:
+        st.session_state.current_pdf = None
+    if 'zoom_level' not in st.session_state:
+        st.session_state.zoom_level = 100
 
 # Main app
 def main():
