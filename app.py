@@ -364,9 +364,22 @@ def main():
     # Get API key from secrets
     client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
-    # Initialize session state for split PDFs
+    # Initialize session state variables
     if 'split_pdfs_to_parse' not in st.session_state:
         st.session_state.split_pdfs_to_parse = []
+
+    # Initialize admin-specific session state variables only if admin
+    if st.session_state.get("is_admin", False):
+        if 'api_preview' not in st.session_state:
+            st.session_state.api_preview = None
+        if 'last_usage' not in st.session_state:
+            st.session_state.last_usage = None
+        if 'raw_json_response' not in st.session_state:
+            st.session_state.raw_json_response = None
+        if 'api_logs' not in st.session_state:
+            st.session_state.api_logs = []
+        if 'problematic_files' not in st.session_state:
+            st.session_state.problematic_files = []
 
     # Create tabs based on admin status
     if st.session_state.get("is_admin", False):
@@ -745,7 +758,10 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     )
 
                     individual_results = []
-                    st.session_state.api_logs = []
+                    
+                    # Only initialize api_logs if admin
+                    if st.session_state.get("is_admin", False):
+                        st.session_state.api_logs = []
 
                     # Process uploaded files
                     total_files = len(all_files_to_process) + len(split_files_to_process)
@@ -792,15 +808,25 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
-                            # Store last API usage statistics
-                            st.session_state.last_usage = {
-                                'input_tokens': message.usage.input_tokens,
-                                'output_tokens': message.usage.output_tokens,
-                                'stop_reason': message.stop_reason
-                            }
-
-                            # Store raw JSON response
-                            st.session_state.raw_json_response = message.model_dump_json()
+                            # Store API usage statistics only if admin
+                            if st.session_state.get("is_admin", False):
+                                st.session_state.last_usage = {
+                                    'input_tokens': message.usage.input_tokens,
+                                    'output_tokens': message.usage.output_tokens,
+                                    'stop_reason': message.stop_reason
+                                }
+                                st.session_state.raw_json_response = message.model_dump_json()
+                                
+                                # Log successful API call
+                                st.session_state.api_logs.append(
+                                    log_api_call(pdf_file, {
+                                        "parsed_response": response_data,
+                                        "raw_response": message.model_dump(),
+                                        "file_processed": pdf_file.name,
+                                        "num_bills_returned": 1 if isinstance(response_data, dict) else len(response_data.get("bills", [])),
+                                        "fields_returned": list(response_data.keys()) if isinstance(response_data, dict) else response_data.get("fields", [])
+                                    })
+                                )
 
                             # Parse response - handle direct JSON response
                             try:
@@ -912,15 +938,25 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                                 ]
                             )
 
-                            # Store last API usage statistics
-                            st.session_state.last_usage = {
-                                'input_tokens': message.usage.input_tokens,
-                                'output_tokens': message.usage.output_tokens,
-                                'stop_reason': message.stop_reason
-                            }
-
-                            # Store raw JSON response
-                            st.session_state.raw_json_response = message.model_dump_json()
+                            # Store API usage statistics only if admin
+                            if st.session_state.get("is_admin", False):
+                                st.session_state.last_usage = {
+                                    'input_tokens': message.usage.input_tokens,
+                                    'output_tokens': message.usage.output_tokens,
+                                    'stop_reason': message.stop_reason
+                                }
+                                st.session_state.raw_json_response = message.model_dump_json()
+                                
+                                # Log successful API call
+                                st.session_state.api_logs.append(
+                                    log_api_call(temp_file, {
+                                        "parsed_response": response_data,
+                                        "raw_response": message.model_dump(),
+                                        "file_processed": file_name,
+                                        "num_bills_returned": 1 if isinstance(response_data, dict) else len(response_data.get("bills", [])),
+                                        "fields_returned": list(response_data.keys()) if isinstance(response_data, dict) else response_data.get("fields", [])
+                                    })
+                                )
 
                             # Parse response
                             try:
@@ -1069,116 +1105,118 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             st.write("### Extracted Data")
             st.dataframe(df_sorted)
 
-    with debug_tab:
-        # Create sections using expanders
-        with st.expander("📤 API Call Preview", expanded=True):
-            st.write("Preview the API call that will be sent when processing files")
-            
-            if uploaded_files:
-                col1, col2 = st.columns([1, 1])
+    # Wrap debug tab code in admin check
+    if st.session_state.get("is_admin", False):
+        with debug_tab:
+            # Create sections using expanders
+            with st.expander("📤 API Call Preview", expanded=True):
+                st.write("Preview the API call that will be sent when processing files")
                 
-                # Create buttons side by side but keep display area unified
-                preview_clicked = col1.button("Generate API Call Preview")
-                count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
-                
-                if preview_clicked or count_tokens_clicked:
-                    # If token counting was requested, show it first
-                    if count_tokens_clicked:
-                        try:
-                            token_count = count_tokens(client, prompt, include_calculations)
-                            st.success("Token Count Results:")
-                            # Print the full response for debugging
-                            print("Token count response:", token_count)
-                            st.json(token_count)  # Show the full response
-                            st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
-                        except Exception as e:
-                            st.error(f"Error counting tokens: {str(e)}")
-                            st.error("Please check the API documentation or try again later.")
+                if uploaded_files:
+                    col1, col2 = st.columns([1, 1])
+                    
+                    # Create buttons side by side but keep display area unified
+                    preview_clicked = col1.button("Generate API Call Preview")
+                    count_tokens_clicked = col2.button("Preview Api Call & Count Tokens")
+                    
+                    if preview_clicked or count_tokens_clicked:
+                        # If token counting was requested, show it first
+                        if count_tokens_clicked:
+                            try:
+                                token_count = count_tokens(client, prompt, include_calculations)
+                                st.success("Token Count Results:")
+                                # Print the full response for debugging
+                                print("Token count response:", token_count)
+                                st.json(token_count)  # Show the full response
+                                st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                            except Exception as e:
+                                st.error(f"Error counting tokens: {str(e)}")
+                                st.error("Please check the API documentation or try again later.")
                             
-                        # Add a visual separator
+                            # Add a visual separator
+                            st.markdown("---")
+                        
+                        # Show the API preview (same for both buttons)
+                        preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                        st.session_state.api_preview = preview
+                        st.json(preview)
+                else:
+                    st.info("Upload files in the main tab to preview the API call")
+            
+            with st.expander("📊 Last API Call Statistics", expanded=False):
+                if hasattr(st.session_state, 'last_usage'):
+                    st.write("Last API Call Statistics:")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
+                    with col2:
+                        st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
+                    
+                    # Add stop reason explanation
+                    stop_reason = st.session_state.last_usage['stop_reason']
+                    explanation = {
+                        "end_turn": "The model completed its response naturally.",
+                        "max_tokens": "The response was cut off due to reaching the token limit.",
+                        "stop_sequence": "The model stopped at a designated stop sequence.",
+                        "error": "The response was terminated due to an error."
+                    }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
+                    
+                    st.write("**Stop Reason:**")
+                    st.info(explanation)
+                else:
+                    st.write("No API calls made yet.")
+            
+            with st.expander("📝 Raw JSON Response", expanded=False):
+                if hasattr(st.session_state, 'raw_json_response'):
+                    st.write("Raw JSON Response from last API call:")
+                    # Parse the JSON string and then format it nicely
+                    try:
+                        formatted_json = json.dumps(json.loads(st.session_state.raw_json_response), indent=2)
+                        st.code(formatted_json, language='json')
+                    except json.JSONDecodeError:
+                        # Fallback to raw display if JSON parsing fails
+                        st.code(st.session_state.raw_json_response, language='json')
+                else:
+                    st.write("No API response data available yet.")
+
+            with st.expander("📋 API Call Logs", expanded=True):
+                if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
+                    for log in st.session_state.api_logs:
+                        st.markdown(f"### File: {log['file_processed']}")
+                        st.markdown("**Timestamp:**")
+                        st.write(log['timestamp'])
+                        
+                        if log['error']:
+                            st.error(f"**Error:** {log['error']}")
+                        else:
+                            st.markdown("**Number of Bills Returned:**")
+                            st.write(log['response']['num_bills_returned'])
+                            st.markdown("**Fields Returned:**")
+                            st.write(log['response']['fields_returned'])
+                            
+                            # Use tabs instead of nested expanders
+                            raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
+                            
+                            with raw_tab:
+                                st.json(log['response']['raw_response'])
+                            
+                            with parsed_tab:
+                                st.json(log['response']['parsed_response'])
+                            
+                        # Add a visual separator between files
                         st.markdown("---")
-                    
-                    # Show the API preview (same for both buttons)
-                    preview = preview_api_call(uploaded_files, prompt, include_calculations)
-                    st.session_state.api_preview = preview
-                    st.json(preview)
-            else:
-                st.info("Upload files in the main tab to preview the API call")
-        
-        with st.expander("📊 Last API Call Statistics", expanded=False):
-            if hasattr(st.session_state, 'last_usage'):
-                st.write("Last API Call Statistics:")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Input Tokens", st.session_state.last_usage['input_tokens'])
-                with col2:
-                    st.metric("Output Tokens", st.session_state.last_usage['output_tokens'])
-                
-                # Add stop reason explanation
-                stop_reason = st.session_state.last_usage['stop_reason']
-                explanation = {
-                    "end_turn": "The model completed its response naturally.",
-                    "max_tokens": "The response was cut off due to reaching the token limit.",
-                    "stop_sequence": "The model stopped at a designated stop sequence.",
-                    "error": "The response was terminated due to an error."
-                }.get(stop_reason, f"Unknown stop reason: {stop_reason}")
-                
-                st.write("**Stop Reason:**")
-                st.info(explanation)
-            else:
-                st.write("No API calls made yet.")
-        
-        with st.expander("📝 Raw JSON Response", expanded=False):
-            if hasattr(st.session_state, 'raw_json_response'):
-                st.write("Raw JSON Response from last API call:")
-                # Parse the JSON string and then format it nicely
-                try:
-                    formatted_json = json.dumps(json.loads(st.session_state.raw_json_response), indent=2)
-                    st.code(formatted_json, language='json')
-                except json.JSONDecodeError:
-                    # Fallback to raw display if JSON parsing fails
-                    st.code(st.session_state.raw_json_response, language='json')
-            else:
-                st.write("No API response data available yet.")
+                else:
+                    st.info("No API calls logged yet.")
 
-        with st.expander("📋 API Call Logs", expanded=True):
-            if hasattr(st.session_state, 'api_logs') and st.session_state.api_logs:
-                for log in st.session_state.api_logs:
-                    st.markdown(f"### File: {log['file_processed']}")
-                    st.markdown("**Timestamp:**")
-                    st.write(log['timestamp'])
-                    
-                    if log['error']:
-                        st.error(f"**Error:** {log['error']}")
-                    else:
-                        st.markdown("**Number of Bills Returned:**")
-                        st.write(log['response']['num_bills_returned'])
-                        st.markdown("**Fields Returned:**")
-                        st.write(log['response']['fields_returned'])
-                        
-                        # Use tabs instead of nested expanders
-                        raw_tab, parsed_tab = st.tabs(["Raw Response", "Parsed Response"])
-                        
-                        with raw_tab:
-                            st.json(log['response']['raw_response'])
-                        
-                        with parsed_tab:
-                            st.json(log['response']['parsed_response'])
-                        
-                    # Add a visual separator between files
-                    st.markdown("---")
-            else:
-                st.info("No API calls logged yet.")
-
-        with st.expander("⚠️ Problematic Files", expanded=True):
-            if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
-                for file_log in st.session_state.problematic_files:
-                    st.markdown(f"### File: {file_log['filename']}")
-                    st.markdown("**Response data:**")
-                    st.json(file_log['response'])
-                    st.markdown("---")
-            else:
-                st.info("No problematic files detected in the last processing run.")
+            with st.expander("⚠️ Problematic Files", expanded=True):
+                if hasattr(st.session_state, 'problematic_files') and st.session_state.problematic_files:
+                    for file_log in st.session_state.problematic_files:
+                        st.markdown(f"### File: {file_log['filename']}")
+                        st.markdown("**Response data:**")
+                        st.json(file_log['response'])
+                        st.markdown("---")
+                else:
+                    st.info("No problematic files detected in the last processing run.")
 
 # Run the app with password protection
 if check_password():
