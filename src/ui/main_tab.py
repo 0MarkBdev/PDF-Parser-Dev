@@ -35,6 +35,8 @@ def render_main_tab():
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
         include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
+        # Store include_calculations in session state
+        st.session_state['include_calculations'] = include_calculations
     with col2:
         use_vision = st.checkbox("Use Vision Processing", value=False, 
                                help="Process PDFs as images using Claude's vision capabilities")
@@ -136,6 +138,9 @@ Return the data in this structure (while adding the proper suffixes for differen
 Remember to replace the null values with the actual extracted data or keep as null if the information is not found in the bill.
 
 Provide ONLY the JSON object as your final output, with no additional text."""
+
+    # Store prompt in session state
+    st.session_state['prompt'] = prompt
 
     # File upload area
     uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
