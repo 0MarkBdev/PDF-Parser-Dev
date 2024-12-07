@@ -179,9 +179,16 @@ Provide ONLY the JSON object as your final output, with no additional text."""
 
             try:
                 # Process the files
-                df = process_pdf_files(uploaded_files, split_files_to_process, prompt, include_calculations, 
-                                    status_container=status_container, progress_bar=progress_bar, 
-                                    total_files=total_files, use_vision=use_vision)
+                df = process_pdf_files(
+                    uploaded_files, 
+                    split_files_to_process, 
+                    prompt, 
+                    include_calculations, 
+                    status_container=status_container, 
+                    progress_bar=progress_bar, 
+                    total_files=total_files,
+                    use_vision=use_vision
+                )
                 
                 if df is not None:
                     status_container.success(f"Successfully processed {len(df)} file{'s' if len(df) > 1 else ''}!")
