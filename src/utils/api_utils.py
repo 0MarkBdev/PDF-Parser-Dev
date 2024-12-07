@@ -9,7 +9,7 @@ from typing import Any
 
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 
-def preview_api_call(uploaded_files, prompt, include_calculations):
+def preview_api_call(uploaded_files, prompt, include_calculations, use_vision=False):
     """Generate a preview of the API call that would be sent"""
     # Show preview for first file only since files are processed individually
     if not uploaded_files:
@@ -24,10 +24,10 @@ def preview_api_call(uploaded_files, prompt, include_calculations):
     # Prepare message content for single PDF
     message_content = [
         {
-            "type": "document",
+            "type": "image" if use_vision else "document",
             "source": {
                 "type": "base64",
-                "media_type": "application/pdf",
+                "media_type": "image/png" if use_vision else "application/pdf",
                 "data": pdf_base64  # Use actual encoded content instead of placeholder
             }
         },

@@ -13,6 +13,9 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
         include_calculations: Whether to include calculations in the output
         client: Anthropic client instance
     """
+    # Get vision mode from session state
+    use_vision = st.session_state.get('use_vision', False)
+    
     # Create sections using expanders
     with st.expander("📤 API Call Preview", expanded=True):
         st.write("Preview the API call that will be sent when processing files")
@@ -42,7 +45,7 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                     st.markdown("---")
                 
                 # Show the API preview (same for both buttons)
-                preview = preview_api_call(uploaded_files, prompt, include_calculations)
+                preview = preview_api_call(uploaded_files, prompt, include_calculations, use_vision)
                 st.session_state.api_preview = preview
                 st.json(preview)
         else:
