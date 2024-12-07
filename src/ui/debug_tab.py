@@ -1,8 +1,73 @@
 """Debug tab UI component for the PDF Parser application."""
 
 import json
+import base64
 import streamlit as st
-from src.utils.api_utils import preview_api_call, count_tokens
+from src.utils.api_utils import preview_api_call
+from src.pdf.parser import convert_pdf_to_image
+from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
+
+def count_tokens(client, prompt, include_calculations, uploaded_files=None, use_vision=False):
+    """Count tokens for the API call.
+    
+    Args:
+        client: Anthropic client instance
+        prompt: The prompt text
+        include_calculations: Whether to include calculations
+        uploaded_files: List of uploaded PDF files
+        use_vision: Whether to process PDFs as images
+    """
+    messages = []
+    
+    if uploaded_files and use_vision:
+        # Convert first PDF to image and include it in token count
+        pdf_file = uploaded_files[0]
+        img_data = convert_pdf_to_image(pdf_file)
+        
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": img_data
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+                },
+                {
+                    "type": "text",
+                    "text": prompt
+                }
+            ]
+        })
+    else:
+        # Regular token counting without PDF/image content
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+                },
+                {
+                    "type": "text",
+                    "text": prompt
+                }
+            ]
+        })
+    
+    response = client.beta.messages.count_tokens(
+        betas=["token-counting-2024-11-01"],
+        model="claude-3-5-sonnet-20241022",
+        messages=messages
+    )
+    
+    return response.json()
 
 def render_debug_tab(uploaded_files, prompt, include_calculations, client):
     """Render the debug tab UI.
@@ -31,12 +96,11 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                 # If token counting was requested, show it first
                 if count_tokens_clicked:
                     try:
-                        token_count = count_tokens(client, prompt, include_calculations)
+                        token_count = count_tokens(client, prompt, include_calculations, uploaded_files, use_vision)
                         st.success("Token Count Results:")
-                        # Print the full response for debugging
-                        print("Token count response:", token_count)
-                        st.json(token_count)  # Show the full response
-                        st.info("Note: This count excludes PDF content as it's not yet supported by the token counting API")
+                        st.json(token_count)
+                        if not use_vision:
+                            st.info("Note: PDF content is excluded from token counting. Enable vision mode to include the first page as an image in the count.")
                     except Exception as e:
                         st.error(f"Error counting tokens: {str(e)}")
                         st.error("Please check the API documentation or try again later.")
