@@ -144,13 +144,10 @@ def process_single_pdf(client, pdf_file, prompt, include_calculations, use_visio
     Returns:
         dict: The extracted data
     """
-    # Prepare message content
-    message_content = []
-    
     if use_vision:
         # Convert PDF to image
         img_data = convert_pdf_to_image(pdf_file)
-        message_content.extend([
+        message_content = [
             {
                 "type": "image",
                 "source": {
@@ -167,15 +164,17 @@ def process_single_pdf(client, pdf_file, prompt, include_calculations, use_visio
                 "type": "text",
                 "text": prompt
             }
-        ])
+        ]
     else:
-        # Regular PDF processing
-        pdf_file.seek(0)  # Reset file pointer before reading
-        pdf_base64 = base64.b64encode(pdf_file.read()).decode('utf-8')
+        # Regular PDF processing - exactly as it was before
         message_content = [
             {
-                "type": "text",
-                "text": f"base64_pdf: {pdf_base64}"
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": base64.b64encode(pdf_file.read()).decode()
+                }
             },
             {
                 "type": "text",
@@ -186,6 +185,7 @@ def process_single_pdf(client, pdf_file, prompt, include_calculations, use_visio
                 "text": prompt
             }
         ]
+        pdf_file.seek(0)  # Reset file pointer
 
     # Send to Claude API
     message = client.messages.create(
