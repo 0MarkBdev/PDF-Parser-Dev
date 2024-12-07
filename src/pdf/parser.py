@@ -6,11 +6,59 @@ import io
 import pandas as pd
 import streamlit as st
 from anthropic import Anthropic
+import fitz  # PyMuPDF
+from PIL import Image
+import os
 
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
 
-def process_pdf_files(uploaded_files, split_files, prompt, include_calculations, status_container=None, progress_bar=None, total_files=None):
+def convert_pdf_to_image(pdf_file, dpi=200):
+    """Convert a PDF file to an image with appropriate quality for Claude vision.
+    
+    Args:
+        pdf_file: The uploaded PDF file
+        dpi: The DPI to use for rendering (default 200 - good balance of quality and size)
+    
+    Returns:
+        base64 encoded image data
+    """
+    # Save PDF temporarily
+    temp_path = os.path.join(os.getcwd(), pdf_file.name)
+    with open(temp_path, "wb") as f:
+        f.write(pdf_file.getvalue())
+    
+    try:
+        # Open PDF
+        pdf_document = fitz.open(temp_path)
+        
+        # Get first page
+        page = pdf_document[0]
+        
+        # Convert to image
+        pix = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
+        
+        # Convert to PIL Image
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        
+        # Save to bytes
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='JPEG', quality=85)
+        img_byte_arr = img_byte_arr.getvalue()
+        
+        # Encode to base64
+        img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+        
+        return img_base64
+        
+    finally:
+        # Clean up
+        if 'pdf_document' in locals():
+            pdf_document.close()
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+def process_pdf_files(uploaded_files, split_files, prompt, include_calculations, status_container=None, progress_bar=None, total_files=None, use_vision=False):
     """Process PDF files through the Claude API.
     
     Args:
@@ -21,6 +69,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
         status_container: Streamlit container for status messages
         progress_bar: Streamlit progress bar
         total_files: Total number of files to process
+        use_vision: Whether to process PDFs as images
     
     Returns:
         DataFrame containing the extracted data
@@ -32,7 +81,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
     # Create the client with custom headers
     pdf_client = Anthropic(
         api_key=st.secrets["ANTHROPIC_API_KEY"],
-        default_headers={"anthropic-beta": "pdfs-2024-09-25"}
+        default_headers={"anthropic-beta": "pdfs-2024-09-25"} if not use_vision else {}
     )
 
     def update_progress():
@@ -44,7 +93,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
     # Process regular uploaded files
     for pdf_file in uploaded_files:
         try:
-            result = process_single_pdf(pdf_client, pdf_file, prompt, include_calculations)
+            result = process_single_pdf(pdf_client, pdf_file, prompt, include_calculations, use_vision)
             if result:
                 individual_results.append(result)
             files_processed += 1
@@ -61,7 +110,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
             temp_file = io.BytesIO(file_content)
             temp_file.name = file_name
             
-            result = process_single_pdf(pdf_client, temp_file, prompt, include_calculations)
+            result = process_single_pdf(pdf_client, temp_file, prompt, include_calculations, use_vision)
             if result:
                 individual_results.append(result)
             files_processed += 1
@@ -82,38 +131,61 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
     
     return None
 
-def process_single_pdf(client, pdf_file, prompt, include_calculations):
+def process_single_pdf(client, pdf_file, prompt, include_calculations, use_vision=False):
     """Process a single PDF file through the Claude API.
     
     Args:
-        client: Anthropic client
-        pdf_file: PDF file to process
+        client: The Anthropic client
+        pdf_file: The PDF file to process
         prompt: The prompt to send to Claude
-        include_calculations: Whether to include calculations in the output
+        include_calculations: Whether to include calculations
+        use_vision: Whether to process the PDF as an image
     
     Returns:
-        Dict containing the extracted data
+        dict: The extracted data
     """
-    # Prepare message content for this PDF
-    message_content = [
-        {
-            "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": "application/pdf",
-                "data": base64.b64encode(pdf_file.read()).decode()
+    # Prepare message content
+    message_content = []
+    
+    if use_vision:
+        # Convert PDF to image
+        img_data = convert_pdf_to_image(pdf_file)
+        message_content.extend([
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": img_data
+                }
+            },
+            {
+                "type": "text",
+                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+            },
+            {
+                "type": "text",
+                "text": prompt
             }
-        },
-        {
-            "type": "text",
-            "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
-        },
-        {
-            "type": "text",
-            "text": prompt
-        }
-    ]
-    pdf_file.seek(0)  # Reset file pointer
+        ])
+    else:
+        # Regular PDF processing
+        pdf_file.seek(0)  # Reset file pointer before reading
+        pdf_base64 = base64.b64encode(pdf_file.read()).decode('utf-8')
+        message_content = [
+            {
+                "type": "text",
+                "text": f"base64_pdf: {pdf_base64}"
+            },
+            {
+                "type": "text",
+                "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
+            },
+            {
+                "type": "text",
+                "text": prompt
+            }
+        ]
 
     # Send to Claude API
     message = client.messages.create(

@@ -32,14 +32,17 @@ def render_main_tab():
         st.rerun()
 
     # Add checkbox here
-    col1, col2 = st.columns([3, 2])
+    col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
         include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
+    with col2:
+        use_vision = st.checkbox("Use Vision Processing", value=False, 
+                               help="Process PDFs as images using Claude's vision capabilities")
     
-    col3, col4 = st.columns([1, 2])
-    with col3:
-        specify_meter = st.checkbox("Specify Meter/Account:", value=False)
+    col4, col5 = st.columns([1, 2])
     with col4:
+        specify_meter = st.checkbox("Specify Meter/Account:", value=False)
+    with col5:
         meter_number = st.text_input("", label_visibility="collapsed", disabled=not specify_meter)
 
     st.write("Enter the fields to be extracted:")
@@ -177,7 +180,8 @@ Provide ONLY the JSON object as your final output, with no additional text."""
             try:
                 # Process the files
                 df = process_pdf_files(uploaded_files, split_files_to_process, prompt, include_calculations, 
-                                    status_container=status_container, progress_bar=progress_bar, total_files=total_files)
+                                    status_container=status_container, progress_bar=progress_bar, 
+                                    total_files=total_files, use_vision=use_vision)
                 
                 if df is not None:
                     status_container.success(f"Successfully processed {len(df)} file{'s' if len(df) > 1 else ''}!")
