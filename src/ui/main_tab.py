@@ -140,6 +140,9 @@ Provide ONLY the JSON object as your final output, with no additional text."""
     # File upload area
     uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
     
+    # Store uploaded files in session state
+    st.session_state['uploaded_files'] = uploaded_files
+    
     # Prepare split PDFs for processing
     split_files_to_process = []
     for split_pdf in list(st.session_state.split_pdfs_to_parse):  # Use list() to avoid modification during iteration
