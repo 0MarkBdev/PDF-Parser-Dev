@@ -40,6 +40,8 @@ def render_main_tab():
     with col2:
         use_vision = st.checkbox("Use Vision Processing", value=False, 
                                help="Process PDFs as images using Claude's vision capabilities")
+        # Store use_vision in session state
+        st.session_state['use_vision'] = use_vision
     
     col4, col5 = st.columns([1, 2])
     with col4:
