@@ -11,19 +11,25 @@ from PIL import Image
 import os
 import cv2
 import numpy as np
-import time
 
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
 
-def optimize_image_for_processing(pil_image, page_num=0):
-    """Optimize a PIL Image for better OCR processing."""
+def optimize_image_for_processing(pil_image):
+    """Optimize a PIL Image for better OCR processing.
+    
+    Args:
+        pil_image: PIL Image to optimize
+        
+    Returns:
+        PIL Image: Optimized image with content centered and excess whitespace removed,
+                  preserving original DPI
+    """
     # Store original DPI information
     original_dpi = pil_image.info.get('dpi')
     
     # Convert PIL to OpenCV format
     cv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-    original_dims = cv_image.shape[:2]  # height, width
     
     # Convert to grayscale
     gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -37,18 +43,12 @@ def optimize_image_for_processing(pil_image, page_num=0):
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contours:
-        st.warning(f"No content areas detected in page {page_num + 1}")
+        # If no contours found, return original image
         return pil_image
     
     # Find the bounding box that contains all content
     x_min, y_min = cv_image.shape[1], cv_image.shape[0]
     x_max, y_max = 0, 0
-    
-    # Create a copy for visualization
-    debug_image = cv_image.copy()
-    
-    # Draw all contours for debugging
-    cv2.drawContours(debug_image, contours, -1, (0, 255, 0), 2)
     
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
@@ -56,9 +56,6 @@ def optimize_image_for_processing(pil_image, page_num=0):
         y_min = min(y_min, y)
         x_max = max(x_max, x + w)
         y_max = max(y_max, y + h)
-        
-        # Draw rectangle around each content area
-        cv2.rectangle(debug_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
     
     # Add padding (2% of image size)
     padding_x = int(cv_image.shape[1] * 0.02)
@@ -69,36 +66,8 @@ def optimize_image_for_processing(pil_image, page_num=0):
     x_max = min(cv_image.shape[1], x_max + padding_x)
     y_max = min(cv_image.shape[0], y_max + padding_y)
     
-    # Draw final bounding box with padding
-    cv2.rectangle(debug_image, (x_min, y_min), (x_max, y_max), (0, 0, 255), 3)
-    
     # Crop the image to the content area
     cropped = cv_image[y_min:y_max, x_min:x_max]
-    
-    # Create BytesIO objects for each image
-    def cv2_to_bytes(img):
-        success, buffer = cv2.imencode('.png', img)
-        if not success:
-            raise ValueError("Failed to encode image")
-        return buffer.tobytes()
-    
-    # Store debug info in session state
-    if 'debug_data' not in st.session_state:
-        st.session_state.debug_data = {}
-    
-    page_key = f"page_{page_num + 1}"
-    if page_key not in st.session_state.debug_data:
-        st.session_state.debug_data[page_key] = {
-            'page': page_num + 1,
-            'original': cv2_to_bytes(cv_image),
-            'debug': cv2_to_bytes(debug_image),
-            'cropped': cv2_to_bytes(cropped),
-            'dims': {
-                'original': original_dims,
-                'bounds': (x_min, y_min, x_max, y_max),
-                'cropped': (y_max - y_min, x_max - x_min)
-            }
-        }
     
     # Convert back to PIL and restore original DPI
     result_image = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
@@ -107,58 +76,17 @@ def optimize_image_for_processing(pil_image, page_num=0):
     
     return result_image
 
-def display_debug_images():
-    """Display debug images in a separate function to avoid UI issues."""
-    if 'debug_data' not in st.session_state:
-        return
-        
-    with st.expander("Debug Images", expanded=True):
-        for page_key, debug_info in st.session_state.debug_data.items():
-            st.write(f"#### Page {debug_info['page']}")
-            
-            cols = st.columns(3)
-            
-            # Original image column
-            with cols[0]:
-                st.download_button(
-                    label=f"Original (Page {debug_info['page']})",
-                    data=debug_info['original'],
-                    file_name=f"original_page_{debug_info['page']}.png",
-                    mime="image/png",
-                    key=f"original_{page_key}"
-                )
-                st.write(f"Original dimensions: {debug_info['dims']['original']}")
-            
-            # Debug view column
-            with cols[1]:
-                st.download_button(
-                    label=f"Debug View (Page {debug_info['page']})",
-                    data=debug_info['debug'],
-                    file_name=f"debug_page_{debug_info['page']}.png",
-                    mime="image/png",
-                    key=f"debug_{page_key}"
-                )
-                st.write(f"Content bounds: {debug_info['dims']['bounds']}")
-            
-            # Cropped image column
-            with cols[2]:
-                st.download_button(
-                    label=f"Cropped (Page {debug_info['page']})",
-                    data=debug_info['cropped'],
-                    file_name=f"cropped_page_{debug_info['page']}.png",
-                    mime="image/png",
-                    key=f"cropped_{page_key}"
-                )
-                st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
-            
-            st.write("---")
-
 def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
-    """Convert all pages of a PDF file to images with appropriate quality for Claude vision."""
-    # Clear previous debug data
-    if 'debug_data' in st.session_state:
-        st.session_state.debug_data = {}
+    """Convert all pages of a PDF file to images with appropriate quality for Claude vision.
     
+    Args:
+        pdf_file: The uploaded PDF file
+        dpi: The DPI to use for rendering (default 200 - good balance of quality and size)
+        use_png: Whether to use PNG format (higher quality) instead of JPEG
+    
+    Returns:
+        list of base64 encoded image data, one per page
+    """
     # Save PDF temporarily
     temp_path = os.path.join(os.getcwd(), pdf_file.name)
     with open(temp_path, "wb") as f:
@@ -170,7 +98,7 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
         images_base64 = []
         
         # Convert each page
-        for page_num, page in enumerate(pdf_document):
+        for page in pdf_document:
             # Convert to image
             pix = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
             
@@ -179,9 +107,9 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             
             # Optimize the image
             try:
-                img = optimize_image_for_processing(img, page_num)
+                img = optimize_image_for_processing(img)
             except Exception as e:
-                st.warning(f"Image optimization failed for page {page_num + 1}, using original image: {str(e)}")
+                st.warning(f"Image optimization failed, using original image: {str(e)}")
             
             # Save to bytes
             img_byte_arr = io.BytesIO()
@@ -196,9 +124,6 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             # Encode to base64
             img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
             images_base64.append((img_base64, media_type))
-        
-        # Display debug images after processing
-        display_debug_images()
             
         return images_base64
         
