@@ -119,12 +119,7 @@ def display_debug_images():
     if 'debug_images' not in st.session_state or not st.session_state.debug_images:
         return
         
-    st.write("### Debug Images")
-    
-    # Create a container for all debug images
-    debug_container = st.container()
-    
-    with debug_container:
+    with st.expander("Debug Images", expanded=True):
         for debug_info in st.session_state.debug_images:
             st.write(f"#### Page {debug_info['page']}")
             
@@ -140,7 +135,7 @@ def display_debug_images():
                     data=debug_info['original'],
                     file_name=f"original_page_{page_num}.png",
                     mime="image/png",
-                    key=f"debug_original_{page_num}_{int(time.time())}"
+                    key=f"debug_original_{page_num}"  # Static key
                 )
                 st.write(f"Original dimensions: {debug_info['dims']['original']}")
             
@@ -151,7 +146,7 @@ def display_debug_images():
                     data=debug_info['debug'],
                     file_name=f"debug_page_{page_num}.png",
                     mime="image/png",
-                    key=f"debug_view_{page_num}_{int(time.time())}"
+                    key=f"debug_view_{page_num}"  # Static key
                 )
                 st.write(f"Content bounds: {debug_info['dims']['bounds']}")
             
@@ -162,7 +157,7 @@ def display_debug_images():
                     data=debug_info['cropped'],
                     file_name=f"cropped_page_{page_num}.png",
                     mime="image/png",
-                    key=f"debug_cropped_{page_num}_{int(time.time())}"
+                    key=f"debug_cropped_{page_num}"  # Static key
                 )
                 st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
             
