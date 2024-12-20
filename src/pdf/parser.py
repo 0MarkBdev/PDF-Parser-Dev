@@ -9,9 +9,72 @@ from anthropic import Anthropic
 import fitz  # PyMuPDF
 from PIL import Image
 import os
+import cv2
+import numpy as np
 
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
+
+def optimize_image_for_processing(pil_image):
+    """Optimize a PIL Image for better OCR processing.
+    
+    Args:
+        pil_image: PIL Image to optimize
+        
+    Returns:
+        PIL Image: Optimized image with content centered and excess whitespace removed,
+                  preserving original DPI
+    """
+    # Store original DPI information
+    original_dpi = pil_image.info.get('dpi')
+    
+    # Convert PIL to OpenCV format
+    cv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+    
+    # Convert to grayscale
+    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply adaptive thresholding to handle different lighting conditions
+    binary = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+    )
+    
+    # Find contours of content areas
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if not contours:
+        # If no contours found, return original image
+        return pil_image
+    
+    # Find the bounding box that contains all content
+    x_min, y_min = cv_image.shape[1], cv_image.shape[0]
+    x_max, y_max = 0, 0
+    
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        x_min = min(x_min, x)
+        y_min = min(y_min, y)
+        x_max = max(x_max, x + w)
+        y_max = max(y_max, y + h)
+    
+    # Add padding (2% of image size)
+    padding_x = int(cv_image.shape[1] * 0.02)
+    padding_y = int(cv_image.shape[0] * 0.02)
+    
+    x_min = max(0, x_min - padding_x)
+    y_min = max(0, y_min - padding_y)
+    x_max = min(cv_image.shape[1], x_max + padding_x)
+    y_max = min(cv_image.shape[0], y_max + padding_y)
+    
+    # Crop the image to the content area
+    cropped = cv_image[y_min:y_max, x_min:x_max]
+    
+    # Convert back to PIL and restore original DPI
+    result_image = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
+    if original_dpi:
+        result_image.info['dpi'] = original_dpi
+    
+    return result_image
 
 def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
     """Convert all pages of a PDF file to images with appropriate quality for Claude vision.
@@ -41,6 +104,12 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             
             # Convert to PIL Image
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            
+            # Optimize the image
+            try:
+                img = optimize_image_for_processing(img)
+            except Exception as e:
+                st.warning(f"Image optimization failed, using original image: {str(e)}")
             
             # Save to bytes
             img_byte_arr = io.BytesIO()

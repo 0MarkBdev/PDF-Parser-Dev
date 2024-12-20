@@ -4,3 +4,4 @@ anthropic
 openpyxl
 PyMuPDF
 Pillow
+opencv-python>=4.8.0
