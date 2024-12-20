@@ -17,16 +17,7 @@ from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
 
 def optimize_image_for_processing(pil_image, page_num=0):
-    """Optimize a PIL Image for better OCR processing.
-    
-    Args:
-        pil_image: PIL Image to optimize
-        page_num: Page number for multi-page PDFs
-        
-    Returns:
-        PIL Image: Optimized image with content centered and excess whitespace removed,
-                  preserving original DPI
-    """
+    """Optimize a PIL Image for better OCR processing."""
     # Store original DPI information
     original_dpi = pil_image.info.get('dpi')
     
@@ -84,9 +75,9 @@ def optimize_image_for_processing(pil_image, page_num=0):
     # Crop the image to the content area
     cropped = cv_image[y_min:y_max, x_min:x_max]
     
-    # Store debug info in session state
-    if 'debug_images' not in st.session_state:
-        st.session_state.debug_images = []
+    # Initialize debug images dict in session state if not exists
+    if 'debug_images_data' not in st.session_state:
+        st.session_state.debug_images_data = {}
     
     # Create BytesIO objects for each image
     def cv2_to_bytes(img):
@@ -95,17 +86,20 @@ def optimize_image_for_processing(pil_image, page_num=0):
             raise ValueError("Failed to encode image")
         return buffer.tobytes()
     
-    st.session_state.debug_images.append({
-        'page': page_num + 1,
-        'original': cv2_to_bytes(cv_image),
-        'debug': cv2_to_bytes(debug_image),
-        'cropped': cv2_to_bytes(cropped),
-        'dims': {
-            'original': original_dims,
-            'bounds': (x_min, y_min, x_max, y_max),
-            'cropped': (y_max - y_min, x_max - x_min)
+    # Store the debug data with unique keys
+    page_key = f"page_{page_num + 1}"
+    if page_key not in st.session_state.debug_images_data:
+        st.session_state.debug_images_data[page_key] = {
+            'page': page_num + 1,
+            'original': cv2_to_bytes(cv_image),
+            'debug': cv2_to_bytes(debug_image),
+            'cropped': cv2_to_bytes(cropped),
+            'dims': {
+                'original': original_dims,
+                'bounds': (x_min, y_min, x_max, y_max),
+                'cropped': (y_max - y_min, x_max - x_min)
+            }
         }
-    })
     
     # Convert back to PIL and restore original DPI
     result_image = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
@@ -116,48 +110,45 @@ def optimize_image_for_processing(pil_image, page_num=0):
 
 def display_debug_images():
     """Display debug images in a separate function to avoid UI issues."""
-    if 'debug_images' not in st.session_state or not st.session_state.debug_images:
+    if 'debug_images_data' not in st.session_state:
         return
         
     with st.expander("Debug Images", expanded=True):
-        for debug_info in st.session_state.debug_images:
+        for page_key, debug_info in st.session_state.debug_images_data.items():
             st.write(f"#### Page {debug_info['page']}")
-            
-            # Create unique keys for this page's buttons
-            page_num = debug_info['page']
             
             cols = st.columns(3)
             
             # Original image column
             with cols[0]:
                 st.download_button(
-                    label=f"Original (Page {page_num})",
+                    label=f"Original (Page {debug_info['page']})",
                     data=debug_info['original'],
-                    file_name=f"original_page_{page_num}.png",
+                    file_name=f"original_page_{debug_info['page']}.png",
                     mime="image/png",
-                    key=f"debug_original_{page_num}"  # Static key
+                    key=f"original_{page_key}"
                 )
                 st.write(f"Original dimensions: {debug_info['dims']['original']}")
             
             # Debug view column
             with cols[1]:
                 st.download_button(
-                    label=f"Debug View (Page {page_num})",
+                    label=f"Debug View (Page {debug_info['page']})",
                     data=debug_info['debug'],
-                    file_name=f"debug_page_{page_num}.png",
+                    file_name=f"debug_page_{debug_info['page']}.png",
                     mime="image/png",
-                    key=f"debug_view_{page_num}"  # Static key
+                    key=f"debug_{page_key}"
                 )
                 st.write(f"Content bounds: {debug_info['dims']['bounds']}")
             
             # Cropped image column
             with cols[2]:
                 st.download_button(
-                    label=f"Cropped (Page {page_num})",
+                    label=f"Cropped (Page {debug_info['page']})",
                     data=debug_info['cropped'],
-                    file_name=f"cropped_page_{page_num}.png",
+                    file_name=f"cropped_page_{debug_info['page']}.png",
                     mime="image/png",
-                    key=f"debug_cropped_{page_num}"  # Static key
+                    key=f"cropped_{page_key}"
                 )
                 st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
             
@@ -166,8 +157,8 @@ def display_debug_images():
 def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
     """Convert all pages of a PDF file to images with appropriate quality for Claude vision."""
     # Clear previous debug images
-    if 'debug_images' in st.session_state:
-        st.session_state.debug_images = []
+    if 'debug_images_data' in st.session_state:
+        st.session_state.debug_images_data = {}
     
     # Save PDF temporarily
     temp_path = os.path.join(os.getcwd(), pdf_file.name)
