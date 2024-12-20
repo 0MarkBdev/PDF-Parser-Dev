@@ -24,106 +24,118 @@ def save_debug_image(image, format='PNG'):
     pil_image.save(img_byte_arr, format=format)
     return img_byte_arr.getvalue()
 
-def render_debug_tab(uploaded_files, prompt, include_calculations, client):
-    """Render the debug tab UI.
+def process_debug_images(debug_pdf):
+    """Process PDF and store debug images in session state."""
+    images_data = convert_pdf_to_image(debug_pdf, use_png=True)
+    debug_images = []
     
-    Args:
-        uploaded_files: List of uploaded PDF files
-        prompt: The prompt to send to Claude
-        include_calculations: Whether to include calculations in the output
-        client: Anthropic client instance
-    """
+    for page_num, (img_base64, _) in enumerate(images_data, 1):
+        # Get original image
+        img_bytes = base64.b64decode(img_base64)
+        original_image = Image.open(io.BytesIO(img_bytes))
+        
+        # Convert to OpenCV format
+        cv_image = cv2.cvtColor(np.array(original_image), cv2.COLOR_RGB2BGR)
+        
+        # Get grayscale
+        gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+        
+        # Get binary image (not inverted)
+        binary = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        
+        # Get final optimized image
+        optimized = optimize_image_for_processing(original_image)
+        
+        # Store all versions
+        page_images = {
+            'original': save_debug_image(original_image),
+            'rgb': save_debug_image(cv_image),
+            'gray': save_debug_image(gray),
+            'binary': save_debug_image(binary),
+            'optimized': save_debug_image(optimized)
+        }
+        debug_images.append(page_images)
+    
+    return debug_images
+
+def render_debug_tab(uploaded_files, prompt, include_calculations, client):
+    """Render the debug tab UI."""
     st.markdown("## Image Processing Debug")
     st.write("Upload a PDF to see intermediate steps of image processing")
+    
+    # Initialize session state for debug images if not exists
+    if 'debug_images' not in st.session_state:
+        st.session_state.debug_images = None
+    
     debug_pdf = st.file_uploader("Upload PDF for image debug", type=['pdf'], key="debug_pdf_uploader")
     
     if debug_pdf:
         if st.button("Process and Download Images", key="process_images_btn"):
             with st.spinner("Processing images..."):
-                # Convert PDF to initial image
-                images_data = convert_pdf_to_image(debug_pdf, use_png=True)
-                
-                for page_num, (img_base64, _) in enumerate(images_data, 1):
-                    st.markdown(f"### Page {page_num}")
-                    
-                    # Get original image
-                    img_bytes = base64.b64decode(img_base64)
-                    original_image = Image.open(io.BytesIO(img_bytes))
-                    
-                    # Convert to OpenCV format
-                    cv_image = cv2.cvtColor(np.array(original_image), cv2.COLOR_RGB2BGR)
-                    
-                    # Get grayscale
-                    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-                    
-                    # Get binary image
-                    binary = cv2.adaptiveThreshold(
-                        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
-                    )
-                    
-                    # Get final optimized image
-                    optimized = optimize_image_for_processing(original_image)
-                    
-                    # Create columns for download buttons
-                    cols = st.columns(5)
-                    
-                    # Prepare download buttons for each stage
-                    with cols[0]:
-                        original_bytes = save_debug_image(original_image)
-                        st.download_button(
-                            "Download Original",
-                            original_bytes,
-                            f"page_{page_num}_original.png",
-                            "image/png",
-                            key=f"download_original_{page_num}"
-                        )
-                        st.image(original_bytes, caption="Original", use_column_width=True)
-                    
-                    with cols[1]:
-                        cv_bytes = save_debug_image(cv_image)
-                        st.download_button(
-                            "Download RGB",
-                            cv_bytes,
-                            f"page_{page_num}_rgb.png",
-                            "image/png",
-                            key=f"download_rgb_{page_num}"
-                        )
-                        st.image(cv_bytes, caption="RGB", use_column_width=True)
-                    
-                    with cols[2]:
-                        gray_bytes = save_debug_image(gray)
-                        st.download_button(
-                            "Download Grayscale",
-                            gray_bytes,
-                            f"page_{page_num}_gray.png",
-                            "image/png",
-                            key=f"download_gray_{page_num}"
-                        )
-                        st.image(gray_bytes, caption="Grayscale", use_column_width=True)
-                    
-                    with cols[3]:
-                        binary_bytes = save_debug_image(binary)
-                        st.download_button(
-                            "Download Binary",
-                            binary_bytes,
-                            f"page_{page_num}_binary.png",
-                            "image/png",
-                            key=f"download_binary_{page_num}"
-                        )
-                        st.image(binary_bytes, caption="Binary", use_column_width=True)
-                    
-                    with cols[4]:
-                        optimized_bytes = save_debug_image(optimized)
-                        st.download_button(
-                            "Download Optimized",
-                            optimized_bytes,
-                            f"page_{page_num}_optimized.png",
-                            "image/png",
-                            key=f"download_optimized_{page_num}"
-                        )
-                        st.image(optimized_bytes, caption="Optimized", use_column_width=True)
-                    
-                    st.markdown("---")
+                st.session_state.debug_images = process_debug_images(debug_pdf)
+    
+    # Display images if they exist in session state
+    if st.session_state.debug_images:
+        for page_num, page_images in enumerate(st.session_state.debug_images, 1):
+            st.markdown(f"### Page {page_num}")
+            
+            cols = st.columns(5)
+            
+            with cols[0]:
+                st.download_button(
+                    "Download Original",
+                    page_images['original'],
+                    f"page_{page_num}_original.png",
+                    "image/png",
+                    key=f"download_original_{page_num}"
+                )
+                st.image(page_images['original'], caption="Original", use_column_width=True)
+            
+            with cols[1]:
+                st.download_button(
+                    "Download RGB",
+                    page_images['rgb'],
+                    f"page_{page_num}_rgb.png",
+                    "image/png",
+                    key=f"download_rgb_{page_num}"
+                )
+                st.image(page_images['rgb'], caption="RGB", use_column_width=True)
+            
+            with cols[2]:
+                st.download_button(
+                    "Download Grayscale",
+                    page_images['gray'],
+                    f"page_{page_num}_gray.png",
+                    "image/png",
+                    key=f"download_gray_{page_num}"
+                )
+                st.image(page_images['gray'], caption="Grayscale", use_column_width=True)
+            
+            with cols[3]:
+                st.download_button(
+                    "Download Binary",
+                    page_images['binary'],
+                    f"page_{page_num}_binary.png",
+                    "image/png",
+                    key=f"download_binary_{page_num}"
+                )
+                st.image(page_images['binary'], caption="Binary (Content Detection)", use_column_width=True)
+            
+            with cols[4]:
+                st.download_button(
+                    "Download Optimized",
+                    page_images['optimized'],
+                    f"page_{page_num}_optimized.png",
+                    "image/png",
+                    key=f"download_optimized_{page_num}"
+                )
+                st.image(page_images['optimized'], caption="Optimized", use_column_width=True)
+            
+            st.markdown("---")
+    elif debug_pdf:
+        st.info("Click 'Process and Download Images' to see the processing steps")
     else:
         st.info("Upload a PDF file to see the intermediate image processing steps")
 
