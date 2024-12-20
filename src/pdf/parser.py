@@ -80,13 +80,44 @@ def optimize_image_for_processing(pil_image):
     # Draw final bounding box with padding
     cv2.rectangle(debug_image, (x_min, y_min), (x_max, y_max), (0, 0, 255), 3)
     
-    # Save debug visualization
-    debug_path = os.path.join(os.getcwd(), "debug_images")
-    os.makedirs(debug_path, exist_ok=True)
+    # Crop the image to the content area
+    cropped = cv_image[y_min:y_max, x_min:x_max]
     
+    # Create debug images as bytes
     timestamp = int(time.time())
-    cv2.imwrite(os.path.join(debug_path, f"original_{timestamp}.png"), cv_image)
-    cv2.imwrite(os.path.join(debug_path, f"debug_visualization_{timestamp}.png"), debug_image)
+    
+    # Convert images to bytes
+    _, original_bytes = cv2.imencode('.png', cv_image)
+    _, debug_bytes = cv2.imencode('.png', debug_image)
+    _, cropped_bytes = cv2.imencode('.png', cropped)
+    
+    # Create download buttons
+    st.write("### Debug Images Downloads")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.download_button(
+            label="Download Original",
+            data=original_bytes.tobytes(),
+            file_name=f"original_{timestamp}.png",
+            mime="image/png"
+        )
+    
+    with col2:
+        st.download_button(
+            label="Download Debug View",
+            data=debug_bytes.tobytes(),
+            file_name=f"debug_{timestamp}.png",
+            mime="image/png"
+        )
+    
+    with col3:
+        st.download_button(
+            label="Download Cropped",
+            data=cropped_bytes.tobytes(),
+            file_name=f"cropped_{timestamp}.png",
+            mime="image/png"
+        )
     
     # Log cropping information
     st.write(f"""
@@ -94,12 +125,7 @@ def optimize_image_for_processing(pil_image):
     - Original dimensions: {original_dims}
     - Content bounds: ({x_min}, {y_min}) to ({x_max}, {y_max})
     - Cropped dimensions: {y_max - y_min} x {x_max - x_min}
-    - Debug images saved in: {debug_path}
     """)
-    
-    # Crop the image to the content area
-    cropped = cv_image[y_min:y_max, x_min:x_max]
-    cv2.imwrite(os.path.join(debug_path, f"cropped_{timestamp}.png"), cropped)
     
     # Convert back to PIL and restore original DPI
     result_image = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
