@@ -16,11 +16,12 @@ import time
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
 
-def optimize_image_for_processing(pil_image):
+def optimize_image_for_processing(pil_image, page_num=0):
     """Optimize a PIL Image for better OCR processing.
     
     Args:
         pil_image: PIL Image to optimize
+        page_num: Page number for multi-page PDFs
         
     Returns:
         PIL Image: Optimized image with content centered and excess whitespace removed,
@@ -45,7 +46,7 @@ def optimize_image_for_processing(pil_image):
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contours:
-        st.warning("No content areas detected in the image")
+        st.warning(f"No content areas detected in page {page_num + 1}")
         return pil_image
     
     # Find the bounding box that contains all content
@@ -83,49 +84,26 @@ def optimize_image_for_processing(pil_image):
     # Crop the image to the content area
     cropped = cv_image[y_min:y_max, x_min:x_max]
     
-    # Create debug images as bytes
-    timestamp = int(time.time())
-    
     # Convert images to bytes
     _, original_bytes = cv2.imencode('.png', cv_image)
     _, debug_bytes = cv2.imencode('.png', debug_image)
     _, cropped_bytes = cv2.imencode('.png', cropped)
     
-    # Create download buttons
-    st.write("### Debug Images Downloads")
-    col1, col2, col3 = st.columns(3)
+    # Store debug info in session state
+    if 'debug_images' not in st.session_state:
+        st.session_state.debug_images = []
     
-    with col1:
-        st.download_button(
-            label="Download Original",
-            data=original_bytes.tobytes(),
-            file_name=f"original_{timestamp}.png",
-            mime="image/png"
-        )
-    
-    with col2:
-        st.download_button(
-            label="Download Debug View",
-            data=debug_bytes.tobytes(),
-            file_name=f"debug_{timestamp}.png",
-            mime="image/png"
-        )
-    
-    with col3:
-        st.download_button(
-            label="Download Cropped",
-            data=cropped_bytes.tobytes(),
-            file_name=f"cropped_{timestamp}.png",
-            mime="image/png"
-        )
-    
-    # Log cropping information
-    st.write(f"""
-    Image Processing Debug Info:
-    - Original dimensions: {original_dims}
-    - Content bounds: ({x_min}, {y_min}) to ({x_max}, {y_max})
-    - Cropped dimensions: {y_max - y_min} x {x_max - x_min}
-    """)
+    st.session_state.debug_images.append({
+        'page': page_num + 1,
+        'original': original_bytes.tobytes(),
+        'debug': debug_bytes.tobytes(),
+        'cropped': cropped_bytes.tobytes(),
+        'dims': {
+            'original': original_dims,
+            'bounds': (x_min, y_min, x_max, y_max),
+            'cropped': (y_max - y_min, x_max - x_min)
+        }
+    })
     
     # Convert back to PIL and restore original DPI
     result_image = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
@@ -145,6 +123,10 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
     Returns:
         list of base64 encoded image data, one per page
     """
+    # Clear previous debug images
+    if 'debug_images' in st.session_state:
+        st.session_state.debug_images = []
+    
     # Save PDF temporarily
     temp_path = os.path.join(os.getcwd(), pdf_file.name)
     with open(temp_path, "wb") as f:
@@ -156,7 +138,7 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
         images_base64 = []
         
         # Convert each page
-        for page in pdf_document:
+        for page_num, page in enumerate(pdf_document):
             # Convert to image
             pix = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
             
@@ -165,9 +147,9 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             
             # Optimize the image
             try:
-                img = optimize_image_for_processing(img)
+                img = optimize_image_for_processing(img, page_num)
             except Exception as e:
-                st.warning(f"Image optimization failed, using original image: {str(e)}")
+                st.warning(f"Image optimization failed for page {page_num + 1}, using original image: {str(e)}")
             
             # Save to bytes
             img_byte_arr = io.BytesIO()
@@ -182,6 +164,40 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             # Encode to base64
             img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
             images_base64.append((img_base64, media_type))
+        
+        # Display debug images after processing
+        if 'debug_images' in st.session_state and st.session_state.debug_images:
+            st.write("### Debug Images")
+            for debug_info in st.session_state.debug_images:
+                st.write(f"#### Page {debug_info['page']}")
+                cols = st.columns(3)
+                
+                with cols[0]:
+                    st.download_button(
+                        label=f"Original (Page {debug_info['page']})",
+                        data=debug_info['original'],
+                        file_name=f"original_page_{debug_info['page']}.png",
+                        mime="image/png"
+                    )
+                    st.write(f"Original dimensions: {debug_info['dims']['original']}")
+                
+                with cols[1]:
+                    st.download_button(
+                        label=f"Debug View (Page {debug_info['page']})",
+                        data=debug_info['debug'],
+                        file_name=f"debug_page_{debug_info['page']}.png",
+                        mime="image/png"
+                    )
+                    st.write(f"Content bounds: {debug_info['dims']['bounds']}")
+                
+                with cols[2]:
+                    st.download_button(
+                        label=f"Cropped (Page {debug_info['page']})",
+                        data=debug_info['cropped'],
+                        file_name=f"cropped_page_{debug_info['page']}.png",
+                        mime="image/png"
+                    )
+                    st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
             
         return images_base64
         
