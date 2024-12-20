@@ -34,21 +34,42 @@ def optimize_image_for_processing(pil_image):
     # Convert to grayscale
     gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
     
-    # Apply adaptive thresholding to handle different lighting conditions
+    # Apply Gaussian blur to reduce noise
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Get binary image with more aggressive thresholding
     binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 10
     )
     
+    # Add edge detection to catch faint content
+    edges = cv2.Canny(blurred, 50, 150)
+    
+    # Combine binary and edges
+    combined = cv2.bitwise_or(binary, edges)
+    
+    # Remove noise with morphological operations
+    kernel = np.ones((3,3), np.uint8)
+    denoised = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel)
+    denoised = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
+    
+    # Dilate to connect nearby components
+    dilate_kernel = np.ones((5,5), np.uint8)
+    dilated = cv2.dilate(denoised, dilate_kernel, iterations=1)
+    
     # Find contours of content areas
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Filter out very small contours (noise) - reduced threshold
+    min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.00005  # 0.005% of image area
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
     
     if not contours:
         # If no contours found, return original image
         return pil_image
     
     # Find the bounding box that contains all content
-    x_min, y_min = cv_image.shape[1], cv_image.shape[0]
-    x_max, y_max = 0, 0
+    x_min, y_min, x_max, y_max = float('inf'), float('inf'), 0, 0
     
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
@@ -57,9 +78,9 @@ def optimize_image_for_processing(pil_image):
         x_max = max(x_max, x + w)
         y_max = max(y_max, y + h)
     
-    # Add padding (2% of image size)
-    padding_x = int(cv_image.shape[1] * 0.02)
-    padding_y = int(cv_image.shape[0] * 0.02)
+    # Add smaller padding (0.5% of image size)
+    padding_x = int(cv_image.shape[1] * 0.005)
+    padding_y = int(cv_image.shape[0] * 0.005)
     
     x_min = max(0, x_min - padding_x)
     y_min = max(0, y_min - padding_y)
