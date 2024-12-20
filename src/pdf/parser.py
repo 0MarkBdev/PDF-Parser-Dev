@@ -84,20 +84,22 @@ def optimize_image_for_processing(pil_image, page_num=0):
     # Crop the image to the content area
     cropped = cv_image[y_min:y_max, x_min:x_max]
     
-    # Convert images to bytes
-    _, original_bytes = cv2.imencode('.png', cv_image)
-    _, debug_bytes = cv2.imencode('.png', debug_image)
-    _, cropped_bytes = cv2.imencode('.png', cropped)
-    
     # Store debug info in session state
     if 'debug_images' not in st.session_state:
         st.session_state.debug_images = []
     
+    # Create BytesIO objects for each image
+    def cv2_to_bytes(img):
+        success, buffer = cv2.imencode('.png', img)
+        if not success:
+            raise ValueError("Failed to encode image")
+        return buffer.tobytes()
+    
     st.session_state.debug_images.append({
         'page': page_num + 1,
-        'original': original_bytes.tobytes(),
-        'debug': debug_bytes.tobytes(),
-        'cropped': cropped_bytes.tobytes(),
+        'original': cv2_to_bytes(cv_image),
+        'debug': cv2_to_bytes(debug_image),
+        'cropped': cv2_to_bytes(cropped),
         'dims': {
             'original': original_dims,
             'bounds': (x_min, y_min, x_max, y_max),
@@ -112,17 +114,52 @@ def optimize_image_for_processing(pil_image, page_num=0):
     
     return result_image
 
+def display_debug_images():
+    """Display debug images in a separate function to avoid UI issues."""
+    if 'debug_images' in st.session_state and st.session_state.debug_images:
+        st.write("### Debug Images")
+        for debug_info in st.session_state.debug_images:
+            st.write(f"#### Page {debug_info['page']}")
+            
+            # Create container for this page's debug info
+            with st.container():
+                cols = st.columns(3)
+                
+                # Original image column
+                with cols[0]:
+                    st.download_button(
+                        label=f"Original (Page {debug_info['page']})",
+                        data=debug_info['original'],
+                        file_name=f"original_page_{debug_info['page']}.png",
+                        mime="image/png",
+                        key=f"original_{debug_info['page']}"
+                    )
+                    st.write(f"Original dimensions: {debug_info['dims']['original']}")
+                
+                # Debug view column
+                with cols[1]:
+                    st.download_button(
+                        label=f"Debug View (Page {debug_info['page']})",
+                        data=debug_info['debug'],
+                        file_name=f"debug_page_{debug_info['page']}.png",
+                        mime="image/png",
+                        key=f"debug_{debug_info['page']}"
+                    )
+                    st.write(f"Content bounds: {debug_info['dims']['bounds']}")
+                
+                # Cropped image column
+                with cols[2]:
+                    st.download_button(
+                        label=f"Cropped (Page {debug_info['page']})",
+                        data=debug_info['cropped'],
+                        file_name=f"cropped_page_{debug_info['page']}.png",
+                        mime="image/png",
+                        key=f"cropped_{debug_info['page']}"
+                    )
+                    st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
+
 def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
-    """Convert all pages of a PDF file to images with appropriate quality for Claude vision.
-    
-    Args:
-        pdf_file: The uploaded PDF file
-        dpi: The DPI to use for rendering (default 200 - good balance of quality and size)
-        use_png: Whether to use PNG format (higher quality) instead of JPEG
-    
-    Returns:
-        list of base64 encoded image data, one per page
-    """
+    """Convert all pages of a PDF file to images with appropriate quality for Claude vision."""
     # Clear previous debug images
     if 'debug_images' in st.session_state:
         st.session_state.debug_images = []
@@ -166,38 +203,7 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             images_base64.append((img_base64, media_type))
         
         # Display debug images after processing
-        if 'debug_images' in st.session_state and st.session_state.debug_images:
-            st.write("### Debug Images")
-            for debug_info in st.session_state.debug_images:
-                st.write(f"#### Page {debug_info['page']}")
-                cols = st.columns(3)
-                
-                with cols[0]:
-                    st.download_button(
-                        label=f"Original (Page {debug_info['page']})",
-                        data=debug_info['original'],
-                        file_name=f"original_page_{debug_info['page']}.png",
-                        mime="image/png"
-                    )
-                    st.write(f"Original dimensions: {debug_info['dims']['original']}")
-                
-                with cols[1]:
-                    st.download_button(
-                        label=f"Debug View (Page {debug_info['page']})",
-                        data=debug_info['debug'],
-                        file_name=f"debug_page_{debug_info['page']}.png",
-                        mime="image/png"
-                    )
-                    st.write(f"Content bounds: {debug_info['dims']['bounds']}")
-                
-                with cols[2]:
-                    st.download_button(
-                        label=f"Cropped (Page {debug_info['page']})",
-                        data=debug_info['cropped'],
-                        file_name=f"cropped_page_{debug_info['page']}.png",
-                        mime="image/png"
-                    )
-                    st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
+        display_debug_images()
             
         return images_base64
         
