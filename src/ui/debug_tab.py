@@ -40,9 +40,9 @@ def process_debug_images(debug_pdf):
         # Get grayscale
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         
-        # Get binary image (not inverted)
+        # Get binary image (inverted for better visualization)
         binary = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
         )
         
         # Find contours for visualization
@@ -54,6 +54,9 @@ def process_debug_images(debug_pdf):
         # Find the bounding box that contains all content
         x_min, y_min = cv_image.shape[1], cv_image.shape[0]
         x_max, y_max = 0, 0
+        
+        # Draw all contours in red with thicker lines
+        cv2.drawContours(contour_viz, contours, -1, (0, 0, 255), 2)
         
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
@@ -71,21 +74,21 @@ def process_debug_images(debug_pdf):
         x_max = min(cv_image.shape[1], x_max + padding_x)
         y_max = min(cv_image.shape[0], y_max + padding_y)
         
-        # Draw the final bounding box in green
-        cv2.rectangle(contour_viz, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-        
-        # Draw all contours in blue
-        cv2.drawContours(contour_viz, contours, -1, (255, 0, 0), 1)
+        # Draw the final bounding box in bright green with thicker line
+        cv2.rectangle(contour_viz, (x_min, y_min), (x_max, y_max), (0, 255, 0), 3)
         
         # Get final optimized image
         optimized = optimize_image_for_processing(original_image)
+        
+        # Convert binary to 3 channels for better visualization
+        binary_viz = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
         
         # Store all versions
         page_images = {
             'original': save_debug_image(original_image),
             'rgb': save_debug_image(cv_image),
             'gray': save_debug_image(gray),
-            'binary': save_debug_image(binary),
+            'binary': save_debug_image(binary_viz),
             'contours': save_debug_image(contour_viz),
             'optimized': save_debug_image(optimized)
         }
@@ -154,7 +157,7 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                     "image/png",
                     key=f"download_binary_{page_num}"
                 )
-                st.image(page_images['binary'], caption="Binary", use_column_width=True)
+                st.image(page_images['binary'], caption="Binary (White = Content)", use_column_width=True)
             
             with cols[4]:
                 st.download_button(
@@ -164,7 +167,7 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                     "image/png",
                     key=f"download_contours_{page_num}"
                 )
-                st.image(page_images['contours'], caption="Detected Content (Blue: Details, Green: Final Crop)", use_column_width=True)
+                st.image(page_images['contours'], caption="Detected Content (Red: Details, Green: Final Crop)", use_column_width=True)
             
             with cols[5]:
                 st.download_button(
@@ -174,7 +177,7 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                     "image/png",
                     key=f"download_optimized_{page_num}"
                 )
-                st.image(page_images['optimized'], caption="Optimized", use_column_width=True)
+                st.image(page_images['optimized'], caption="Final Cropped Result", use_column_width=True)
             
             st.markdown("---")
     elif debug_pdf:
