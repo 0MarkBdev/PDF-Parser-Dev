@@ -3,6 +3,26 @@
 import json
 import streamlit as st
 from src.utils.api_utils import preview_api_call, count_tokens
+import io
+from PIL import Image
+import cv2
+import numpy as np
+from src.pdf.parser import convert_pdf_to_image, optimize_image_for_processing
+import base64
+
+def save_debug_image(image, format='PNG'):
+    """Save image to bytes for downloading."""
+    img_byte_arr = io.BytesIO()
+    if isinstance(image, np.ndarray):
+        # Convert OpenCV image to PIL
+        if len(image.shape) == 2:  # Grayscale
+            pil_image = Image.fromarray(image)
+        else:  # BGR to RGB
+            pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    else:
+        pil_image = image
+    pil_image.save(img_byte_arr, format=format)
+    return img_byte_arr.getvalue()
 
 def render_debug_tab(uploaded_files, prompt, include_calculations, client):
     """Render the debug tab UI.
@@ -14,6 +34,102 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
         client: Anthropic client instance
     """
     # Create sections using expanders
+    with st.expander("🖼️ Image Processing Debug", expanded=True):
+        st.write("Upload a PDF to see intermediate steps of image processing")
+        debug_pdf = st.file_uploader("Upload PDF for image debug", type=['pdf'])
+        
+        if debug_pdf:
+            if st.button("Process and Download Images"):
+                # Convert PDF to initial image
+                images_data = convert_pdf_to_image(debug_pdf, use_png=True)
+                
+                for page_num, (img_base64, _) in enumerate(images_data, 1):
+                    st.markdown(f"### Page {page_num}")
+                    
+                    # Get original image
+                    img_bytes = base64.b64decode(img_base64)
+                    original_image = Image.open(io.BytesIO(img_bytes))
+                    
+                    # Convert to OpenCV format
+                    cv_image = cv2.cvtColor(np.array(original_image), cv2.COLOR_RGB2BGR)
+                    
+                    # Get grayscale
+                    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+                    
+                    # Get binary image
+                    binary = cv2.adaptiveThreshold(
+                        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+                    )
+                    
+                    # Get final optimized image
+                    optimized = optimize_image_for_processing(original_image)
+                    
+                    # Create columns for download buttons
+                    cols = st.columns(5)
+                    
+                    # Prepare download buttons for each stage
+                    with cols[0]:
+                        original_bytes = save_debug_image(original_image)
+                        st.download_button(
+                            "Original",
+                            original_bytes,
+                            f"page_{page_num}_original.png",
+                            "image/png"
+                        )
+                    
+                    with cols[1]:
+                        cv_bytes = save_debug_image(cv_image)
+                        st.download_button(
+                            "RGB",
+                            cv_bytes,
+                            f"page_{page_num}_rgb.png",
+                            "image/png"
+                        )
+                    
+                    with cols[2]:
+                        gray_bytes = save_debug_image(gray)
+                        st.download_button(
+                            "Grayscale",
+                            gray_bytes,
+                            f"page_{page_num}_gray.png",
+                            "image/png"
+                        )
+                    
+                    with cols[3]:
+                        binary_bytes = save_debug_image(binary)
+                        st.download_button(
+                            "Binary",
+                            binary_bytes,
+                            f"page_{page_num}_binary.png",
+                            "image/png"
+                        )
+                    
+                    with cols[4]:
+                        optimized_bytes = save_debug_image(optimized)
+                        st.download_button(
+                            "Optimized",
+                            optimized_bytes,
+                            f"page_{page_num}_optimized.png",
+                            "image/png"
+                        )
+                    
+                    # Show preview of images
+                    preview_cols = st.columns(5)
+                    with preview_cols[0]:
+                        st.image(original_bytes, caption="Original")
+                    with preview_cols[1]:
+                        st.image(cv_bytes, caption="RGB")
+                    with preview_cols[2]:
+                        st.image(gray_bytes, caption="Grayscale")
+                    with preview_cols[3]:
+                        st.image(binary_bytes, caption="Binary")
+                    with preview_cols[4]:
+                        st.image(optimized_bytes, caption="Optimized")
+                    
+                    st.markdown("---")
+        else:
+            st.info("Upload a PDF file to see the intermediate image processing steps")
+
     with st.expander("📤 API Call Preview", expanded=True):
         st.write("Preview the API call that will be sent when processing files")
         
