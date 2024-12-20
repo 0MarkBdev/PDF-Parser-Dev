@@ -37,7 +37,7 @@ def process_debug_images(debug_pdf):
         # Convert to OpenCV format
         cv_image = cv2.cvtColor(np.array(original_image), cv2.COLOR_RGB2BGR)
         
-        # Get grayscale
+        # Convert to grayscale
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         
         # Apply Gaussian blur to reduce noise
@@ -45,19 +45,29 @@ def process_debug_images(debug_pdf):
         
         # Get binary image with more aggressive thresholding
         binary = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 15
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 10
         )
+        
+        # Add edge detection to catch faint content
+        edges = cv2.Canny(blurred, 50, 150)
+        
+        # Combine binary and edges
+        combined = cv2.bitwise_or(binary, edges)
         
         # Remove noise with morphological operations
         kernel = np.ones((3,3), np.uint8)
-        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        denoised = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel)
+        denoised = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
         
-        # Find contours for visualization
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Dilate to connect nearby components
+        dilate_kernel = np.ones((5,5), np.uint8)
+        dilated = cv2.dilate(denoised, dilate_kernel, iterations=1)
         
-        # Filter out very small contours (noise)
-        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0001  # 0.01% of image area
+        # Find contours of content areas
+        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Filter out very small contours (noise) - reduced threshold
+        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.00005  # 0.005% of image area
         contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
         
         # Create a copy of original image for contour visualization
@@ -78,9 +88,9 @@ def process_debug_images(debug_pdf):
                 x_max = max(x_max, x + w)
                 y_max = max(y_max, y + h)
             
-            # Add smaller padding (1% of image size)
-            padding_x = int(cv_image.shape[1] * 0.01)
-            padding_y = int(cv_image.shape[0] * 0.01)
+            # Add smaller padding (0.5% of image size)
+            padding_x = int(cv_image.shape[1] * 0.005)
+            padding_y = int(cv_image.shape[0] * 0.005)
             
             x_min = max(0, x_min - padding_x)
             y_min = max(0, y_min - padding_y)
@@ -99,7 +109,7 @@ def process_debug_images(debug_pdf):
         optimized = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
         
         # Convert binary to 3 channels for better visualization
-        binary_viz = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+        binary_viz = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)  # Changed from binary to dilated for visualization
         
         # Store all versions
         page_images = {
