@@ -45,6 +45,38 @@ def process_debug_images(debug_pdf):
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
         )
         
+        # Find contours for visualization
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Create a copy of original image for contour visualization
+        contour_viz = cv_image.copy()
+        
+        # Find the bounding box that contains all content
+        x_min, y_min = cv_image.shape[1], cv_image.shape[0]
+        x_max, y_max = 0, 0
+        
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            x_min = min(x_min, x)
+            y_min = min(y_min, y)
+            x_max = max(x_max, x + w)
+            y_max = max(y_max, y + h)
+        
+        # Add padding (2% of image size)
+        padding_x = int(cv_image.shape[1] * 0.02)
+        padding_y = int(cv_image.shape[0] * 0.02)
+        
+        x_min = max(0, x_min - padding_x)
+        y_min = max(0, y_min - padding_y)
+        x_max = min(cv_image.shape[1], x_max + padding_x)
+        y_max = min(cv_image.shape[0], y_max + padding_y)
+        
+        # Draw the final bounding box in green
+        cv2.rectangle(contour_viz, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        
+        # Draw all contours in blue
+        cv2.drawContours(contour_viz, contours, -1, (255, 0, 0), 1)
+        
         # Get final optimized image
         optimized = optimize_image_for_processing(original_image)
         
@@ -54,6 +86,7 @@ def process_debug_images(debug_pdf):
             'rgb': save_debug_image(cv_image),
             'gray': save_debug_image(gray),
             'binary': save_debug_image(binary),
+            'contours': save_debug_image(contour_viz),
             'optimized': save_debug_image(optimized)
         }
         debug_images.append(page_images)
@@ -81,7 +114,7 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
         for page_num, page_images in enumerate(st.session_state.debug_images, 1):
             st.markdown(f"### Page {page_num}")
             
-            cols = st.columns(5)
+            cols = st.columns(6)  # Changed to 6 columns
             
             with cols[0]:
                 st.download_button(
@@ -121,9 +154,19 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                     "image/png",
                     key=f"download_binary_{page_num}"
                 )
-                st.image(page_images['binary'], caption="Binary (Content Detection)", use_column_width=True)
+                st.image(page_images['binary'], caption="Binary", use_column_width=True)
             
             with cols[4]:
+                st.download_button(
+                    "Download Contours",
+                    page_images['contours'],
+                    f"page_{page_num}_contours.png",
+                    "image/png",
+                    key=f"download_contours_{page_num}"
+                )
+                st.image(page_images['contours'], caption="Detected Content (Blue: Details, Green: Final Crop)", use_column_width=True)
+            
+            with cols[5]:
                 st.download_button(
                     "Download Optimized",
                     page_images['optimized'],
