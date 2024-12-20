@@ -75,10 +75,6 @@ def optimize_image_for_processing(pil_image, page_num=0):
     # Crop the image to the content area
     cropped = cv_image[y_min:y_max, x_min:x_max]
     
-    # Initialize debug images dict in session state if not exists
-    if 'debug_images_data' not in st.session_state:
-        st.session_state.debug_images_data = {}
-    
     # Create BytesIO objects for each image
     def cv2_to_bytes(img):
         success, buffer = cv2.imencode('.png', img)
@@ -86,10 +82,13 @@ def optimize_image_for_processing(pil_image, page_num=0):
             raise ValueError("Failed to encode image")
         return buffer.tobytes()
     
-    # Store the debug data with unique keys
+    # Store debug info in session state
+    if 'debug_data' not in st.session_state:
+        st.session_state.debug_data = {}
+    
     page_key = f"page_{page_num + 1}"
-    if page_key not in st.session_state.debug_images_data:
-        st.session_state.debug_images_data[page_key] = {
+    if page_key not in st.session_state.debug_data:
+        st.session_state.debug_data[page_key] = {
             'page': page_num + 1,
             'original': cv2_to_bytes(cv_image),
             'debug': cv2_to_bytes(debug_image),
@@ -110,11 +109,11 @@ def optimize_image_for_processing(pil_image, page_num=0):
 
 def display_debug_images():
     """Display debug images in a separate function to avoid UI issues."""
-    if 'debug_images_data' not in st.session_state:
+    if 'debug_data' not in st.session_state:
         return
         
     with st.expander("Debug Images", expanded=True):
-        for page_key, debug_info in st.session_state.debug_images_data.items():
+        for page_key, debug_info in st.session_state.debug_data.items():
             st.write(f"#### Page {debug_info['page']}")
             
             cols = st.columns(3)
@@ -152,13 +151,13 @@ def display_debug_images():
                 )
                 st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
             
-            st.write("---")  # Add separator between pages
+            st.write("---")
 
 def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
     """Convert all pages of a PDF file to images with appropriate quality for Claude vision."""
-    # Clear previous debug images
-    if 'debug_images_data' in st.session_state:
-        st.session_state.debug_images_data = {}
+    # Clear previous debug data
+    if 'debug_data' in st.session_state:
+        st.session_state.debug_data = {}
     
     # Save PDF temporarily
     temp_path = os.path.join(os.getcwd(), pdf_file.name)
