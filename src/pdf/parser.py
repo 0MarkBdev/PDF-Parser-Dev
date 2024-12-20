@@ -11,6 +11,7 @@ from PIL import Image
 import os
 import cv2
 import numpy as np
+import time
 
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
@@ -30,6 +31,7 @@ def optimize_image_for_processing(pil_image):
     
     # Convert PIL to OpenCV format
     cv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+    original_dims = cv_image.shape[:2]  # height, width
     
     # Convert to grayscale
     gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -43,12 +45,18 @@ def optimize_image_for_processing(pil_image):
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contours:
-        # If no contours found, return original image
+        st.warning("No content areas detected in the image")
         return pil_image
     
     # Find the bounding box that contains all content
     x_min, y_min = cv_image.shape[1], cv_image.shape[0]
     x_max, y_max = 0, 0
+    
+    # Create a copy for visualization
+    debug_image = cv_image.copy()
+    
+    # Draw all contours for debugging
+    cv2.drawContours(debug_image, contours, -1, (0, 255, 0), 2)
     
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
@@ -56,6 +64,9 @@ def optimize_image_for_processing(pil_image):
         y_min = min(y_min, y)
         x_max = max(x_max, x + w)
         y_max = max(y_max, y + h)
+        
+        # Draw rectangle around each content area
+        cv2.rectangle(debug_image, (x, y), (x + w, y + h), (255, 0, 0), 2)
     
     # Add padding (2% of image size)
     padding_x = int(cv_image.shape[1] * 0.02)
@@ -66,8 +77,29 @@ def optimize_image_for_processing(pil_image):
     x_max = min(cv_image.shape[1], x_max + padding_x)
     y_max = min(cv_image.shape[0], y_max + padding_y)
     
+    # Draw final bounding box with padding
+    cv2.rectangle(debug_image, (x_min, y_min), (x_max, y_max), (0, 0, 255), 3)
+    
+    # Save debug visualization
+    debug_path = os.path.join(os.getcwd(), "debug_images")
+    os.makedirs(debug_path, exist_ok=True)
+    
+    timestamp = int(time.time())
+    cv2.imwrite(os.path.join(debug_path, f"original_{timestamp}.png"), cv_image)
+    cv2.imwrite(os.path.join(debug_path, f"debug_visualization_{timestamp}.png"), debug_image)
+    
+    # Log cropping information
+    st.write(f"""
+    Image Processing Debug Info:
+    - Original dimensions: {original_dims}
+    - Content bounds: ({x_min}, {y_min}) to ({x_max}, {y_max})
+    - Cropped dimensions: {y_max - y_min} x {x_max - x_min}
+    - Debug images saved in: {debug_path}
+    """)
+    
     # Crop the image to the content area
     cropped = cv_image[y_min:y_max, x_min:x_max]
+    cv2.imwrite(os.path.join(debug_path, f"cropped_{timestamp}.png"), cropped)
     
     # Convert back to PIL and restore original DPI
     result_image = Image.fromarray(cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB))
