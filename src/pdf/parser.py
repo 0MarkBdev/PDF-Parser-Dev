@@ -130,54 +130,40 @@ def display_debug_images():
             
             # Create unique keys for this page's buttons
             page_num = debug_info['page']
-            original_key = f"debug_original_{page_num}"
-            debug_key = f"debug_view_{page_num}"
-            cropped_key = f"debug_cropped_{page_num}"
-            
-            # Initialize button states if not exist
-            for key in [original_key, debug_key, cropped_key]:
-                if key not in st.session_state:
-                    st.session_state[key] = False
             
             cols = st.columns(3)
             
             # Original image column
             with cols[0]:
-                if st.download_button(
+                st.download_button(
                     label=f"Original (Page {page_num})",
                     data=debug_info['original'],
                     file_name=f"original_page_{page_num}.png",
                     mime="image/png",
-                    key=original_key,
-                    on_click=lambda: None  # Prevent rerun
-                ):
-                    st.session_state[original_key] = True
+                    key=f"debug_original_{page_num}_{int(time.time())}"
+                )
                 st.write(f"Original dimensions: {debug_info['dims']['original']}")
             
             # Debug view column
             with cols[1]:
-                if st.download_button(
+                st.download_button(
                     label=f"Debug View (Page {page_num})",
                     data=debug_info['debug'],
                     file_name=f"debug_page_{page_num}.png",
                     mime="image/png",
-                    key=debug_key,
-                    on_click=lambda: None  # Prevent rerun
-                ):
-                    st.session_state[debug_key] = True
+                    key=f"debug_view_{page_num}_{int(time.time())}"
+                )
                 st.write(f"Content bounds: {debug_info['dims']['bounds']}")
             
             # Cropped image column
             with cols[2]:
-                if st.download_button(
+                st.download_button(
                     label=f"Cropped (Page {page_num})",
                     data=debug_info['cropped'],
                     file_name=f"cropped_page_{page_num}.png",
                     mime="image/png",
-                    key=cropped_key,
-                    on_click=lambda: None  # Prevent rerun
-                ):
-                    st.session_state[cropped_key] = True
+                    key=f"debug_cropped_{page_num}_{int(time.time())}"
+                )
                 st.write(f"Cropped dimensions: {debug_info['dims']['cropped']}")
             
             st.write("---")  # Add separator between pages
