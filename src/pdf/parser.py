@@ -13,15 +13,16 @@ import os
 from src.config.examples import CALCULATIONS_EXAMPLES, SIMPLE_EXAMPLES
 from src.utils.api_utils import log_api_call
 
-def convert_pdf_to_image(pdf_file, dpi=200):
-    """Convert a PDF file to an image with appropriate quality for Claude vision.
+def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
+    """Convert all pages of a PDF file to images with appropriate quality for Claude vision.
     
     Args:
         pdf_file: The uploaded PDF file
         dpi: The DPI to use for rendering (default 200 - good balance of quality and size)
+        use_png: Whether to use PNG format (higher quality) instead of JPEG
     
     Returns:
-        base64 encoded image data
+        list of base64 encoded image data, one per page
     """
     # Save PDF temporarily
     temp_path = os.path.join(os.getcwd(), pdf_file.name)
@@ -31,25 +32,31 @@ def convert_pdf_to_image(pdf_file, dpi=200):
     try:
         # Open PDF
         pdf_document = fitz.open(temp_path)
+        images_base64 = []
         
-        # Get first page
-        page = pdf_document[0]
-        
-        # Convert to image
-        pix = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
-        
-        # Convert to PIL Image
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        
-        # Save to bytes
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='JPEG', quality=85)
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        # Encode to base64
-        img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
-        
-        return img_base64
+        # Convert each page
+        for page in pdf_document:
+            # Convert to image
+            pix = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
+            
+            # Convert to PIL Image
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            
+            # Save to bytes
+            img_byte_arr = io.BytesIO()
+            if use_png:
+                img.save(img_byte_arr, format='PNG')
+                media_type = 'image/png'
+            else:
+                img.save(img_byte_arr, format='JPEG', quality=85)
+                media_type = 'image/jpeg'
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            # Encode to base64
+            img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+            images_base64.append((img_base64, media_type))
+            
+        return images_base64
         
     finally:
         # Clean up
@@ -58,7 +65,7 @@ def convert_pdf_to_image(pdf_file, dpi=200):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-def process_pdf_files(uploaded_files, split_files, prompt, include_calculations, status_container=None, progress_bar=None, total_files=None, use_vision=False):
+def process_pdf_files(uploaded_files, split_files, prompt, include_calculations, status_container=None, progress_bar=None, total_files=None, use_vision=False, use_png=False):
     """Process PDF files through the Claude API.
     
     Args:
@@ -70,6 +77,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
         progress_bar: Streamlit progress bar
         total_files: Total number of files to process
         use_vision: Whether to process PDFs as images
+        use_png: Whether to use PNG format for images
     
     Returns:
         DataFrame containing the extracted data
@@ -93,7 +101,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
     # Process regular uploaded files
     for pdf_file in uploaded_files:
         try:
-            result = process_single_pdf(pdf_client, pdf_file, prompt, include_calculations, use_vision)
+            result = process_single_pdf(pdf_client, pdf_file, prompt, include_calculations, use_vision, use_png)
             if result:
                 individual_results.append(result)
             files_processed += 1
@@ -110,7 +118,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
             temp_file = io.BytesIO(file_content)
             temp_file.name = file_name
             
-            result = process_single_pdf(pdf_client, temp_file, prompt, include_calculations, use_vision)
+            result = process_single_pdf(pdf_client, temp_file, prompt, include_calculations, use_vision, use_png)
             if result:
                 individual_results.append(result)
             files_processed += 1
@@ -131,7 +139,7 @@ def process_pdf_files(uploaded_files, split_files, prompt, include_calculations,
     
     return None
 
-def process_single_pdf(client, pdf_file, prompt, include_calculations, use_vision=False):
+def process_single_pdf(client, pdf_file, prompt, include_calculations, use_vision=False, use_png=False):
     """Process a single PDF file through the Claude API.
     
     Args:
@@ -140,22 +148,31 @@ def process_single_pdf(client, pdf_file, prompt, include_calculations, use_visio
         prompt: The prompt to send to Claude
         include_calculations: Whether to include calculations
         use_vision: Whether to process the PDF as an image
+        use_png: Whether to use PNG format for images
     
     Returns:
         dict: The extracted data
     """
     if use_vision:
-        # Convert PDF to image
-        img_data = convert_pdf_to_image(pdf_file)
-        message_content = [
-            {
+        # Convert PDF to images
+        images_data = convert_pdf_to_image(pdf_file, use_png=use_png)
+        
+        # Create message content with all images
+        message_content = []
+        
+        # Add all images first
+        for img_data, media_type in images_data:
+            message_content.append({
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": "image/jpeg",
+                    "media_type": media_type,
                     "data": img_data
                 }
-            },
+            })
+        
+        # Add examples and prompt
+        message_content.extend([
             {
                 "type": "text",
                 "text": CALCULATIONS_EXAMPLES if include_calculations else SIMPLE_EXAMPLES
@@ -164,7 +181,7 @@ def process_single_pdf(client, pdf_file, prompt, include_calculations, use_visio
                 "type": "text",
                 "text": prompt
             }
-        ]
+        ])
     else:
         # Regular PDF processing - exactly as it was before
         message_content = [

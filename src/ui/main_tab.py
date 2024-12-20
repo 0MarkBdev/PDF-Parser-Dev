@@ -35,13 +35,22 @@ def render_main_tab():
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
         include_calculations = st.checkbox("Include charge calculations and breakdowns", value=False)
-        # Store include_calculations in session state
-        st.session_state['include_calculations'] = include_calculations
     with col2:
         use_vision = st.checkbox("Use Vision Processing", value=False, 
                                help="Process PDFs as images using Claude's vision capabilities")
-        # Store use_vision in session state
-        st.session_state['use_vision'] = use_vision
+    with col3:
+        image_format = st.selectbox(
+            "Image Format",
+            options=[
+                ("JPEG (Lower Quality)", False),
+                ("PNG (Higher Quality)", True)
+            ],
+            format_func=lambda x: x[0],
+            disabled=not use_vision,
+            help="Select the image format for PDF conversion",
+            key="image_format"
+        )
+        use_png = image_format[1] if use_vision else False
     
     col4, col5 = st.columns([1, 2])
     with col4:
@@ -141,14 +150,24 @@ Remember to replace the null values with the actual extracted data or keep as nu
 
 Provide ONLY the JSON object as your final output, with no additional text."""
 
-    # Store prompt in session state
-    st.session_state['prompt'] = prompt
-
     # File upload area
-    uploaded_files = st.file_uploader("Upload PDF Bills", type=['pdf'], accept_multiple_files=True)
+    if "file_uploader_key" not in st.session_state:
+        st.session_state.file_uploader_key = 0
     
-    # Store uploaded files in session state
-    st.session_state['uploaded_files'] = uploaded_files
+    def clear_files():
+        st.session_state.file_uploader_key += 1
+    
+    uploaded_files = st.file_uploader("Upload PDF Bills", 
+                                    type=['pdf'], 
+                                    accept_multiple_files=True, 
+                                    key=f"uploaded_pdf_bills_{st.session_state.file_uploader_key}")
+    
+    # Add Clear All button if there are uploaded files
+    if uploaded_files and len(uploaded_files) > 0:  # Check that we actually have files
+        st.button('🗑️ Clear All', type='primary', use_container_width=True, 
+                 key='clear_files_btn', 
+                 help='Remove all uploaded files',
+                 on_click=clear_files)
     
     # Prepare split PDFs for processing
     split_files_to_process = []
@@ -197,7 +216,8 @@ Provide ONLY the JSON object as your final output, with no additional text."""
                     status_container=status_container, 
                     progress_bar=progress_bar, 
                     total_files=total_files,
-                    use_vision=use_vision
+                    use_vision=use_vision,
+                    use_png=image_format[1] if use_vision else False
                 )
                 
                 if df is not None:
