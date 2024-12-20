@@ -33,13 +33,13 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
         include_calculations: Whether to include calculations in the output
         client: Anthropic client instance
     """
-    # Create sections using expanders
-    with st.expander("🖼️ Image Processing Debug", expanded=True):
-        st.write("Upload a PDF to see intermediate steps of image processing")
-        debug_pdf = st.file_uploader("Upload PDF for image debug", type=['pdf'])
-        
-        if debug_pdf:
-            if st.button("Process and Download Images"):
+    st.markdown("## Image Processing Debug")
+    st.write("Upload a PDF to see intermediate steps of image processing")
+    debug_pdf = st.file_uploader("Upload PDF for image debug", type=['pdf'], key="debug_pdf_uploader")
+    
+    if debug_pdf:
+        if st.button("Process and Download Images", key="process_images_btn"):
+            with st.spinner("Processing images..."):
                 # Convert PDF to initial image
                 images_data = convert_pdf_to_image(debug_pdf, use_png=True)
                 
@@ -71,65 +71,65 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
                     with cols[0]:
                         original_bytes = save_debug_image(original_image)
                         st.download_button(
-                            "Original",
+                            "Download Original",
                             original_bytes,
                             f"page_{page_num}_original.png",
-                            "image/png"
+                            "image/png",
+                            key=f"download_original_{page_num}"
                         )
+                        st.image(original_bytes, caption="Original", use_column_width=True)
                     
                     with cols[1]:
                         cv_bytes = save_debug_image(cv_image)
                         st.download_button(
-                            "RGB",
+                            "Download RGB",
                             cv_bytes,
                             f"page_{page_num}_rgb.png",
-                            "image/png"
+                            "image/png",
+                            key=f"download_rgb_{page_num}"
                         )
+                        st.image(cv_bytes, caption="RGB", use_column_width=True)
                     
                     with cols[2]:
                         gray_bytes = save_debug_image(gray)
                         st.download_button(
-                            "Grayscale",
+                            "Download Grayscale",
                             gray_bytes,
                             f"page_{page_num}_gray.png",
-                            "image/png"
+                            "image/png",
+                            key=f"download_gray_{page_num}"
                         )
+                        st.image(gray_bytes, caption="Grayscale", use_column_width=True)
                     
                     with cols[3]:
                         binary_bytes = save_debug_image(binary)
                         st.download_button(
-                            "Binary",
+                            "Download Binary",
                             binary_bytes,
                             f"page_{page_num}_binary.png",
-                            "image/png"
+                            "image/png",
+                            key=f"download_binary_{page_num}"
                         )
+                        st.image(binary_bytes, caption="Binary", use_column_width=True)
                     
                     with cols[4]:
                         optimized_bytes = save_debug_image(optimized)
                         st.download_button(
-                            "Optimized",
+                            "Download Optimized",
                             optimized_bytes,
                             f"page_{page_num}_optimized.png",
-                            "image/png"
+                            "image/png",
+                            key=f"download_optimized_{page_num}"
                         )
-                    
-                    # Show preview of images
-                    preview_cols = st.columns(5)
-                    with preview_cols[0]:
-                        st.image(original_bytes, caption="Original")
-                    with preview_cols[1]:
-                        st.image(cv_bytes, caption="RGB")
-                    with preview_cols[2]:
-                        st.image(gray_bytes, caption="Grayscale")
-                    with preview_cols[3]:
-                        st.image(binary_bytes, caption="Binary")
-                    with preview_cols[4]:
-                        st.image(optimized_bytes, caption="Optimized")
+                        st.image(optimized_bytes, caption="Optimized", use_column_width=True)
                     
                     st.markdown("---")
-        else:
-            st.info("Upload a PDF file to see the intermediate image processing steps")
+    else:
+        st.info("Upload a PDF file to see the intermediate image processing steps")
 
+    st.markdown("---")
+
+    # Original debug sections
     with st.expander("📤 API Call Preview", expanded=True):
         st.write("Preview the API call that will be sent when processing files")
         
