@@ -87,13 +87,14 @@ def optimize_image_for_processing(pil_image):
     
     return result_image
 
-def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
+def convert_pdf_to_image(pdf_file, dpi=200, use_png=False, skip_optimization=False):
     """Convert all pages of a PDF file to images with appropriate quality for Claude vision.
     
     Args:
         pdf_file: The uploaded PDF file
         dpi: The DPI to use for rendering (default 200 - good balance of quality and size)
         use_png: Whether to use PNG format (higher quality) instead of JPEG
+        skip_optimization: Whether to skip the image optimization step
     
     Returns:
         list of base64 encoded image data, one per page
@@ -116,11 +117,12 @@ def convert_pdf_to_image(pdf_file, dpi=200, use_png=False):
             # Convert to PIL Image
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             
-            # Optimize the image
-            try:
-                img = optimize_image_for_processing(img)
-            except Exception as e:
-                st.warning(f"Image optimization failed, using original image: {str(e)}")
+            # Optimize the image only if not skipped
+            if not skip_optimization:
+                try:
+                    img = optimize_image_for_processing(img)
+                except Exception as e:
+                    st.warning(f"Image optimization failed, using original image: {str(e)}")
             
             # Save to bytes
             img_byte_arr = io.BytesIO()

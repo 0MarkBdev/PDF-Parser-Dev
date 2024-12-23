@@ -26,7 +26,7 @@ def save_debug_image(image, format='PNG'):
 
 def process_debug_images(debug_pdf):
     """Process PDF and store debug images in session state."""
-    images_data = convert_pdf_to_image(debug_pdf, use_png=True)
+    images_data = convert_pdf_to_image(debug_pdf, use_png=True, skip_optimization=True)  # Skip optimization to get true original
     debug_images = []
     
     for page_num, (img_base64, _) in enumerate(images_data, 1):
