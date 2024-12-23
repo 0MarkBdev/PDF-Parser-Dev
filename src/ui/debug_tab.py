@@ -41,15 +41,15 @@ def process_debug_images(debug_pdf):
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         
         # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         
         # Get binary image with more aggressive thresholding
         binary = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 20
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 15
         )
         
         # Remove noise with morphological operations
-        kernel = np.ones((5,5), np.uint8)
+        kernel = np.ones((3,3), np.uint8)
         binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
         binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
         
@@ -57,7 +57,7 @@ def process_debug_images(debug_pdf):
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         # Filter out very small contours (noise)
-        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0001  # Even less aggressive filtering
+        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0001  # 0.01% of image area
         contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
         
         # Create a copy of original image for contour visualization
@@ -71,7 +71,6 @@ def process_debug_images(debug_pdf):
             # Draw all contours in red with thicker lines
             cv2.drawContours(contour_viz, contours, -1, (0, 0, 255), 2)
             
-            # First pass: get rough content area
             for contour in contours:
                 x, y, w, h = cv2.boundingRect(contour)
                 x_min = min(x_min, x)
@@ -79,25 +78,14 @@ def process_debug_images(debug_pdf):
                 x_max = max(x_max, x + w)
                 y_max = max(y_max, y + h)
             
-            # Calculate content area height
-            content_height = y_max - y_min
+            # Add smaller padding (1% of image size)
+            padding_x = int(cv_image.shape[1] * 0.01)
+            padding_y = int(cv_image.shape[0] * 0.01)
             
-            # Add very generous padding
-            padding_x = int(cv_image.shape[1] * 0.05)  # 5% horizontal padding
-            padding_y = int(cv_image.shape[0] * 0.1)   # 10% vertical padding
-            
-            # Add extra top padding to ensure headers
-            extra_top_padding = int(cv_image.shape[0] * 0.15)  # 15% extra top padding
-            
-            # Calculate boundaries with padding
             x_min = max(0, x_min - padding_x)
-            y_min = max(0, y_min - padding_y - extra_top_padding)
+            y_min = max(0, y_min - padding_y)
             x_max = min(cv_image.shape[1], x_max + padding_x)
             y_max = min(cv_image.shape[0], y_max + padding_y)
-            
-            # If we're cropping too much from the top, just start from top of image
-            if y_min > cv_image.shape[0] * 0.2:  # If we're cutting off more than 20% from top
-                y_min = 0
             
             # Draw the final bounding box in bright green with thicker line
             cv2.rectangle(contour_viz, (x_min, y_min), (x_max, y_max), (0, 255, 0), 3)
