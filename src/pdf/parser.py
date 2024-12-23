@@ -39,29 +39,19 @@ def optimize_image_for_processing(pil_image):
     
     # Get binary image with more aggressive thresholding
     binary = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 10
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 15
     )
-    
-    # Add edge detection to catch faint content
-    edges = cv2.Canny(blurred, 50, 150)
-    
-    # Combine binary and edges
-    combined = cv2.bitwise_or(binary, edges)
     
     # Remove noise with morphological operations
     kernel = np.ones((3,3), np.uint8)
-    denoised = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel)
-    denoised = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
-    
-    # Dilate to connect nearby components
-    dilate_kernel = np.ones((5,5), np.uint8)
-    dilated = cv2.dilate(denoised, dilate_kernel, iterations=1)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
     
     # Find contours of content areas
-    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # Filter out very small contours (noise) - reduced threshold
-    min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.00005  # 0.005% of image area
+    # Filter out very small contours (noise)
+    min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0001  # 0.01% of image area
     contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
     
     if not contours:
@@ -78,9 +68,9 @@ def optimize_image_for_processing(pil_image):
         x_max = max(x_max, x + w)
         y_max = max(y_max, y + h)
     
-    # Add smaller padding (0.5% of image size)
-    padding_x = int(cv_image.shape[1] * 0.005)
-    padding_y = int(cv_image.shape[0] * 0.005)
+    # Add smaller padding (1% of image size)
+    padding_x = int(cv_image.shape[1] * 0.01)
+    padding_y = int(cv_image.shape[0] * 0.01)
     
     x_min = max(0, x_min - padding_x)
     y_min = max(0, y_min - padding_y)
