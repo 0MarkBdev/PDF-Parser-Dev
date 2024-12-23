@@ -57,7 +57,7 @@ def process_debug_images(debug_pdf):
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         # Filter out very small contours (noise)
-        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.001
+        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0005  # Reduced from 0.001 to be less aggressive
         contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
         
         # Create a copy of original image for contour visualization
@@ -71,6 +71,7 @@ def process_debug_images(debug_pdf):
             # Draw all contours in red with thicker lines
             cv2.drawContours(contour_viz, contours, -1, (0, 0, 255), 2)
             
+            # First pass: get rough content area
             for contour in contours:
                 x, y, w, h = cv2.boundingRect(contour)
                 x_min = min(x_min, x)
@@ -78,12 +79,18 @@ def process_debug_images(debug_pdf):
                 x_max = max(x_max, x + w)
                 y_max = max(y_max, y + h)
             
-            # Add smaller padding (1% of image size)
-            padding_x = int(cv_image.shape[1] * 0.01)
-            padding_y = int(cv_image.shape[0] * 0.01)
+            # Calculate content area height and add more padding for headers/footers
+            content_height = y_max - y_min
+            
+            # Add larger padding (5% of image size for top/bottom, 2% for sides)
+            padding_x = int(cv_image.shape[1] * 0.02)
+            padding_y = int(cv_image.shape[0] * 0.05)
+            
+            # Add extra padding to top to ensure headers are included
+            extra_top_padding = int(cv_image.shape[0] * 0.05)  # Additional 5% for top
             
             x_min = max(0, x_min - padding_x)
-            y_min = max(0, y_min - padding_y)
+            y_min = max(0, y_min - padding_y - extra_top_padding)
             x_max = min(cv_image.shape[1], x_max + padding_x)
             y_max = min(cv_image.shape[0], y_max + padding_y)
             
