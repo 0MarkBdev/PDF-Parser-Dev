@@ -57,7 +57,7 @@ def process_debug_images(debug_pdf):
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         # Filter out very small contours (noise)
-        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0005  # Reduced from 0.001 to be less aggressive
+        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0001  # Even less aggressive filtering
         contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
         
         # Create a copy of original image for contour visualization
@@ -79,20 +79,25 @@ def process_debug_images(debug_pdf):
                 x_max = max(x_max, x + w)
                 y_max = max(y_max, y + h)
             
-            # Calculate content area height and add more padding for headers/footers
+            # Calculate content area height
             content_height = y_max - y_min
             
-            # Add larger padding (5% of image size for top/bottom, 2% for sides)
-            padding_x = int(cv_image.shape[1] * 0.02)
-            padding_y = int(cv_image.shape[0] * 0.05)
+            # Add very generous padding
+            padding_x = int(cv_image.shape[1] * 0.05)  # 5% horizontal padding
+            padding_y = int(cv_image.shape[0] * 0.1)   # 10% vertical padding
             
-            # Add extra padding to top to ensure headers are included
-            extra_top_padding = int(cv_image.shape[0] * 0.05)  # Additional 5% for top
+            # Add extra top padding to ensure headers
+            extra_top_padding = int(cv_image.shape[0] * 0.15)  # 15% extra top padding
             
+            # Calculate boundaries with padding
             x_min = max(0, x_min - padding_x)
             y_min = max(0, y_min - padding_y - extra_top_padding)
             x_max = min(cv_image.shape[1], x_max + padding_x)
             y_max = min(cv_image.shape[0], y_max + padding_y)
+            
+            # If we're cropping too much from the top, just start from top of image
+            if y_min > cv_image.shape[0] * 0.2:  # If we're cutting off more than 20% from top
+                y_min = 0
             
             # Draw the final bounding box in bright green with thicker line
             cv2.rectangle(contour_viz, (x_min, y_min), (x_max, y_max), (0, 255, 0), 3)
@@ -270,7 +275,7 @@ def render_debug_tab(uploaded_files, prompt, include_calculations, client):
         else:
             st.write("No API calls made yet.")
     
-    with st.expander("📝 Raw JSON Response", expanded=False):
+    with st.expander("�� Raw JSON Response", expanded=False):
         if hasattr(st.session_state, 'raw_json_response'):
             st.write("Raw JSON Response from last API call:")
             # Parse the JSON string and then format it nicely
