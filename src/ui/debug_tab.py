@@ -57,7 +57,7 @@ def process_debug_images(debug_pdf):
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         # Filter out very small contours (noise)
-        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.002  # Increased from 0.0001 (0.01%) to 0.002 (0.2%)
+        min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0005  # Middle ground: 0.05% of image area
         contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
         
         # Create a copy of original image for contour visualization
