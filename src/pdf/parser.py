@@ -51,7 +51,7 @@ def optimize_image_for_processing(pil_image):
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     # Filter out very small contours (noise)
-    min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0001  # 0.01% of image area
+    min_contour_area = cv_image.shape[0] * cv_image.shape[1] * 0.0005  # 0.05% of image area
     contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
     
     if not contours:
